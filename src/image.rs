@@ -58,51 +58,49 @@ impl Color
 
 struct SignedDistance
 {
-    point: (f64, f64)
+    point: Point2<f64>
 }
 
 impl SignedDistance
 {
-    pub fn new(point: (f64, f64)) -> Self
+    pub fn new(point: Point2<f64>) -> Self
     {
         Self{point}
     }
 
-    pub fn translate(&mut self, translation: (f64, f64))
+    pub fn translate(&mut self, translation: Point2<f64>)
     {
-        self.point.0 -= translation.0;
-        self.point.1 -= translation.1;
+        self.point -= translation;
     }
 
     pub fn rotate(&mut self, rotation: f64)
     {
         let (r_sin, r_cos) = rotation.sin_cos();
 
-        self.point = (
-            r_cos * self.point.0 + r_sin * self.point.1,
-            r_cos * self.point.1 - r_sin * self.point.0
-        );
+        self.point = Point2{
+            x: r_cos * self.point.x + r_sin * self.point.y,
+            y: r_cos * self.point.y - r_sin * self.point.x
+        };
     }
 
-    pub fn scale(&mut self, scale: (f64, f64))
+    pub fn scale(&mut self, scale: Point2<f64>)
     {
-        self.point.0 /= scale.0;
-        self.point.1 /= scale.1;
+        self.point /= scale;
     }
 
     pub fn circle(&self, size: f64) -> f64
     {
-        self.point.0.hypot(self.point.1) - size
+        self.point.x.hypot(self.point.y) - size
     }
 
     pub fn rectangle(&self, size: f64) -> f64
     {
-        let dist = (self.point.0.abs() - size, self.point.1.abs() - size);
+        let dist = self.point.abs() - size;
 
-        let n_dist = (dist.0.max(0.0), dist.1.max(0.0));
-        let out_dist = n_dist.0.hypot(n_dist.1);
+        let n_dist = Point2{x: dist.x.max(0.0), y: dist.y.max(0.0)};
+        let out_dist = n_dist.x.hypot(n_dist.y);
 
-        let in_dist = dist.0.max(dist.1).min(0.0);
+        let in_dist = dist.x.max(dist.y).min(0.0);
 
         out_dist + in_dist
     }
@@ -111,8 +109,8 @@ impl SignedDistance
 #[derive(Clone, Copy)]
 pub struct Line
 {
-    p0: (f64, f64),
-    p1: (f64, f64),
+    p0: Point2<f64>,
+    p1: Point2<f64>,
     thickness: f64,
     c: Color,
     rotation: f64,
@@ -134,16 +132,16 @@ impl<'a> DeferredSDFDrawer<'a>
         let p0 = self.image.with_aspect(p0);
         let p1 = self.image.with_aspect(p1);
 
-        let p_offset = (p1.0 - p0.0, p1.1 - p0.1);
+        let p_offset = p1 - p0;
 
-        let rotation = p_offset.1.atan2(p_offset.0);
-        let length = p_offset.0.hypot(p_offset.1);
+        let rotation = p_offset.y.atan2(p_offset.x);
+        let length = p_offset.x.hypot(p_offset.y);
 
         let half_length = length / 2.0;
         let local_length = half_length / thickness;
         
         let clip_distance =
-            (p_offset.0.powi(2) + p_offset.1.powi(2))
+            (p_offset.x.powi(2) + p_offset.y.powi(2))
             + 2.0 * length * thickness
             + thickness.powi(2);
 
@@ -222,14 +220,14 @@ impl PPMImage
         DeferredSDFDrawer{image: self, lines: Vec::new()}
     }
 
-    fn with_aspect(&self, point: Point2<f64>) -> (f64, f64)
+    fn with_aspect(&self, point: Point2<f64>) -> Point2<f64>
     {
         if self.width_bigger
         {
-            (point.x * self.aspect, point.y)
+            Point2{x: point.x * self.aspect, y: point.y}
         } else
         {
-            (point.x, point.y * self.aspect)
+            Point2{x: point.x, y: point.y * self.aspect}
         }
     }
 
@@ -260,8 +258,8 @@ impl PPMImage
                         rotation
                     } = line;
 
-                    let curr_distance = (curr.0 - p0.0, curr.1 - p0.1);
-                    let curr_distance = curr_distance.0.powi(2) + curr_distance.1.powi(2);
+                    let curr_distance = curr - p0;
+                    let curr_distance = curr_distance.x.powi(2) + curr_distance.y.powi(2);
 
                     if curr_distance > clip_distance
                     {
@@ -280,8 +278,8 @@ impl PPMImage
 
                     body.rotate(rotation);
 
-                    body.translate((half_length, 0.0));
-                    body.scale((local_length, 1.0));
+                    body.translate(Point2{x: half_length, y: 0.0});
+                    body.scale(Point2{x: local_length, y: 1.0});
 
                     let is_cap = (start_cap.circle(thickness) < 0.0)
                         || (end_cap.circle(thickness) < 0.0);
@@ -300,42 +298,48 @@ impl PPMImage
         }
     }
 
-    pub fn triangle()
-    {
-    }
-
-    fn line_pixels(&self, p0: (f64, f64), p1: (f64, f64)) -> Vec<PixelInfo>
+    pub fn thick_line(&mut self, p0: Point2<f64>, p1: Point2<f64>, c: Color)
     {
         todo!();
     }
 
-    pub fn line(&mut self, p0: (f64, f64), p1: (f64, f64), c: Color)
+    pub fn triangle(&mut self, p0: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, c: Color)
+    {
+        todo!();
+    }
+
+    fn line_pixels(&self, p0: Point2<f64>, p1: Point2<f64>) -> Vec<PixelInfo>
+    {
+        todo!();
+    }
+
+    pub fn line(&mut self, p0: Point2<f64>, p1: Point2<f64>, c: Color)
     {
         let mut p0 = self.to_local_f(p0);
         let mut p1 = self.to_local_f(p1);
 
-        let is_steep = (p1.1 - p0.1).abs() > (p1.0 - p0.0).abs();
+        let is_steep = (p1.y - p0.y).abs() > (p1.x - p0.x).abs();
 
         if is_steep
         {
-            mem::swap(&mut p0.0, &mut p0.1);
-            mem::swap(&mut p1.0, &mut p1.1);
+            mem::swap(&mut p0.x, &mut p0.y);
+            mem::swap(&mut p1.x, &mut p1.y);
         }
 
-        if p0.0 > p1.0
+        if p0.x > p1.x
         {
-            mem::swap(&mut p0.0, &mut p1.0);
-            mem::swap(&mut p0.1, &mut p1.1);
+            mem::swap(&mut p0.x, &mut p1.x);
+            mem::swap(&mut p0.y, &mut p1.y);
         }
 
-        let d = (p1.0 - p0.0, p1.1 - p0.1);
+        let d = p1 - p0;
 
-        let gradient = if d.0 == 0.0
+        let gradient = if d.x == 0.0
         {
             1.0
         } else
         {
-            d.1 / d.0
+            d.y / d.x
         };
 
         let rfpart = |v: f64|
@@ -345,19 +349,19 @@ impl PPMImage
 
         let mut plot = |x: f64, y: f64, brightness: f64|
         {
-            let pos = (x as usize, y as usize);
+            let pos = Point2{x: x as usize, y: y as usize};
 
             let prev_v = &mut self[pos];
             *prev_v = prev_v.lerp(c, brightness as f32);
         };
 
-        let mut draw_endpoint = |point: (f64, f64), recip: bool|
+        let mut draw_endpoint = |point: Point2<f64>, recip: bool|
         {
-            let x_end = point.0.round();
-            let y_end = point.1 + gradient * (x_end - point.0);
+            let x_end = point.x.round();
+            let y_end = point.y + gradient * (x_end - point.x);
 
             let x_gap = {
-                let v = point.0 + 0.5;
+                let v = point.x + 0.5;
 
                 if recip
                 {
@@ -405,43 +409,46 @@ impl PPMImage
         }
     }
 
-    fn to_local_f(&self, point: (f64, f64)) -> (f64, f64)
+    fn to_local_f(&self, point: Point2<f64>) -> Point2<f64>
     {
-        (
-            point.0 * self.width as f64,
-            (1.0 - point.1) * self.height as f64
-        )
+        Point2{
+            x: point.x * self.width as f64,
+            y: (1.0 - point.y) * self.height as f64
+        }
     }
 
-    pub fn to_local(&self, point: (f64, f64)) -> (usize, usize)
+    pub fn to_local(&self, point: Point2<f64>) -> Point2<usize>
     {
         let p = self.to_local_f(point);
 
-        ((p.0 as usize).max(0).min(self.width - 1), (p.1 as usize).max(0).min(self.height - 1))
+        Point2{
+            x: (p.x as usize).max(0).min(self.width - 1),
+            y: (p.y as usize).max(0).min(self.height - 1)
+        }
     }
 
-    fn index(&self, pos: (usize, usize)) -> usize
+    fn index(&self, pos: Point2<usize>) -> usize
     {
-        assert!(pos.1 < self.height);
-        assert!(pos.0 < self.width);
+        assert!(pos.y < self.height);
+        assert!(pos.x < self.width);
 
-        pos.0 + pos.1 * self.width
+        pos.x + pos.y * self.width
     }
 }
 
-impl Index<(usize, usize)> for PPMImage
+impl Index<Point2<usize>> for PPMImage
 {
     type Output = Color;
 
-    fn index(&self, index: (usize, usize)) -> &Self::Output
+    fn index(&self, index: Point2<usize>) -> &Self::Output
     {
         &self.data[self.index(index)]
     }
 }
 
-impl IndexMut<(usize, usize)> for PPMImage
+impl IndexMut<Point2<usize>> for PPMImage
 {
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output
+    fn index_mut(&mut self, index: Point2<usize>) -> &mut Self::Output
     {
         let index = self.index(index);
         &mut self.data[index]
