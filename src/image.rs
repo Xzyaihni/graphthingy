@@ -75,12 +75,7 @@ impl SignedDistance
 
     pub fn rotate(&mut self, rotation: f64)
     {
-        let (r_sin, r_cos) = rotation.sin_cos();
-
-        self.point = Point2{
-            x: r_cos * self.point.x + r_sin * self.point.y,
-            y: r_cos * self.point.y - r_sin * self.point.x
-        };
+        self.point = self.point.rotate(rotation);
     }
 
     pub fn scale(&mut self, scale: Point2<f64>)
@@ -164,12 +159,6 @@ impl<'a> DeferredSDFDrawer<'a>
     }
 }
 
-struct PixelInfo
-{
-    pos: Point2<usize>,
-    interpolation: f64
-}
-
 pub struct PPMImage
 {
     data: Vec<Color>,
@@ -228,6 +217,17 @@ impl PPMImage
         } else
         {
             Point2{x: point.x, y: point.y * self.aspect}
+        }
+    }
+
+    fn without_aspect(&self, point: Point2<f64>) -> Point2<f64>
+    {
+        if self.width_bigger
+        {
+            Point2{x: point.x / self.aspect, y: point.y}
+        } else
+        {
+            Point2{x: point.x, y: point.y / self.aspect}
         }
     }
 
@@ -298,19 +298,118 @@ impl PPMImage
         }
     }
 
-    pub fn thick_line(&mut self, p0: Point2<f64>, p1: Point2<f64>, c: Color)
+    pub fn line_thick(&mut self, p0: Point2<f64>, p1: Point2<f64>, thickness: f64, c: Color)
     {
-        todo!();
+        let diff = p1 - p0;
+        let angle = -diff.y.atan2(diff.x);
+
+        let direction = |raw: Point2<f64>|
+        {
+            let direction = raw.rotate(angle);
+
+            self.without_aspect(direction) * thickness
+        };
+
+        let up = direction(Point2{x: 0.0, y: 1.0});
+        let right = direction(Point2{x: 1.0, y: 0.0});
+
+        // the line
+        self.triangle(p0 + up, p1 + up, p0 - up, c);
+        self.triangle(p0 - up, p1 + up, p1 - up, c);
+
+        // the caps
+        self.triangle(p0 - right, p0 + up, p0 - up, c);
+        self.triangle(p1 + right, p1 + up, p1 - up, c);
     }
 
     pub fn triangle(&mut self, p0: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, c: Color)
     {
-        todo!();
+        self.triangle_local(self.to_local(p0), self.to_local(p1), self.to_local(p2), c);
     }
 
-    fn line_pixels(&self, p0: Point2<f64>, p1: Point2<f64>) -> Vec<PixelInfo>
+    fn triangle_local(&mut self, p0: Point2<usize>, p1: Point2<usize>, p2: Point2<usize>, c: Color)
     {
-        todo!();
+        let y_lowest = p0.y.min(p1.y.min(p2.y));
+        let y_highest = p0.y.max(p1.y.max(p2.y));
+
+        let mut low_high_pairs = vec![(usize::MAX, usize::MIN); y_highest - y_lowest + 1];
+
+        let mut on_pixel = |pos: Point2<usize>|
+        {
+            let index = pos.y - y_lowest;
+            let this_pair = &mut low_high_pairs[index];
+
+            this_pair.0 = this_pair.0.min(pos.x);
+            this_pair.1 = this_pair.1.max(pos.x);
+        };
+
+        self.line_pixels(p0, p1).into_iter().for_each(&mut on_pixel);
+        self.line_pixels(p1, p2).into_iter().for_each(&mut on_pixel);
+        self.line_pixels(p2, p0).into_iter().for_each(on_pixel);
+
+        for (index, (low, high)) in low_high_pairs.into_iter().enumerate()
+        {
+            let y = index + y_lowest;
+
+            for x in low..=high
+            {
+                let point = Point2{x, y};
+                self[point] = c;
+            }
+        }
+    }
+
+    pub fn line_pixels(&self, p0: Point2<usize>, p1: Point2<usize>) -> Vec<Point2<usize>>
+    {
+        let mut p0 = p0.cast::<i32>();
+        let p1 = p1.cast::<i32>();
+
+        let distance = (p1 - p0).abs();
+
+        let dx = distance.x;
+        let sx: i32 = if p0.x < p1.x { 1 } else { -1 };
+
+        let dy = -distance.y;
+        let sy: i32 = if p0.y < p1.y { 1 } else { -1 };
+
+        let mut error = dx + dy;
+
+        let mut pixels = Vec::new();
+        loop
+        {
+            pixels.push(p0.cast());
+
+            if p0.x == p1.x && p0.y == p1.y
+            {
+                break;
+            }
+
+            let error_2 = error * 2;
+
+            if error_2 >= dy
+            {
+                if p0.x == p1.x
+                {
+                    break;
+                }
+
+                error += dy;
+                p0.x += sx;
+            }
+
+            if error_2 <= dx
+            {
+                if p0.y == p1.y
+                {
+                    break;
+                }
+
+                error += dx;
+                p0.y += sy;
+            }
+        }
+
+        pixels
     }
 
     pub fn line(&mut self, p0: Point2<f64>, p1: Point2<f64>, c: Color)

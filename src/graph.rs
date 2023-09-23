@@ -5,7 +5,7 @@ use std::{
     path::Path
 };
 
-use crate::{PPMImage, DeferredSDFDrawer, Color, Point2};
+use crate::{PPMImage, Color, Point2};
 
 
 type PointType = Point2<f64>;
@@ -234,7 +234,6 @@ impl Grapher
         let pad = pad;
 
         let mut image = PPMImage::new(width, height, Color::white());
-        let mut sdf_drawer = image.sdf_drawer();
         
         let c = Color{r: 210, g: 210, b: 210};
         for graph in &self.graphs
@@ -247,11 +246,11 @@ impl Grapher
                 let left = Point2{x: 0.0, y: self.position(&left).y};
                 let right = Point2{x: 1.0, y: self.position(&right).y};
 
-                sdf_drawer.line(Self::fit(&left, pad), Self::fit(&right, pad), thickness, c);
+                image.line_thick(Self::fit(&left, pad), Self::fit(&right, pad), thickness, c);
             }
         }
         
-        Self::draw_borders(&mut sdf_drawer, pad, thickness, Color::black());
+        Self::draw_borders(&mut image, pad, thickness, Color::black());
 
         let mut colors = vec![
             Color{r: 255, g: 120, b: 120},
@@ -265,17 +264,15 @@ impl Grapher
         {
             let color = colors.next().expect("it should have enough colors");
 
-            self.draw_graph(&mut sdf_drawer, graph, pad, thickness, color);
+            self.draw_graph(&mut image, graph, pad, thickness, color);
         }
-
-        sdf_drawer.submit();
 
         image.save(path)
     }
 
     fn draw_graph(
         &self,
-        sdf_drawer: &mut DeferredSDFDrawer,
+        image: &mut PPMImage,
         graph: &Graph,
         pad: Point2<f64>,
         thickness: f64,
@@ -287,13 +284,13 @@ impl Grapher
 
         for (input, output) in pairs
         {
-            sdf_drawer.line(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
+            image.line_thick(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
         }
     }
 
-    fn draw_borders(sdf_drawer: &mut DeferredSDFDrawer, pad: Point2<f64>, thickness: f64, c: Color)
+    fn draw_borders(image: &mut PPMImage, pad: Point2<f64>, thickness: f64, c: Color)
     {
-        sdf_drawer.line(pad, Point2{x: pad.x, y: 1.0 - pad.y}, thickness, c);
-        sdf_drawer.line(pad, Point2{x: 1.0 - pad.x, y: pad.y}, thickness, c);
+        image.line_thick(pad, Point2{x: pad.x, y: 1.0 - pad.y}, thickness, c);
+        image.line_thick(pad, Point2{x: 1.0 - pad.x, y: pad.y}, thickness, c);
     }
 }

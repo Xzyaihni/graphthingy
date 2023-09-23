@@ -1,13 +1,16 @@
-use std::ops::{
-    Add,
-    Sub,
-    Mul,
-    Div,
-    AddAssign,
-    SubAssign,
-    MulAssign,
-    DivAssign,
-    Neg
+use std::{
+    fmt::Debug,
+    ops::{
+        Add,
+        Sub,
+        Mul,
+        Div,
+        AddAssign,
+        SubAssign,
+        MulAssign,
+        DivAssign,
+        Neg
+    }
 };
 
 
@@ -24,10 +27,38 @@ impl<T> Point2<T>
     {
         Self{x, y}
     }
+
+    pub fn cast<U: TryFrom<T>>(self) -> Point2<U>
+    where
+        <U as TryFrom<T>>::Error: Debug
+    {
+        Point2{x: self.x.try_into().unwrap(), y: self.y.try_into().unwrap()}
+    }
+}
+
+impl Point2<i32>
+{
+    pub fn abs(self) -> Self
+    {
+        Self{
+            x: self.x.abs(),
+            y: self.y.abs()
+        }
+    }
 }
 
 impl Point2<f64>
 {
+    pub fn rotate(self, rotation: f64) -> Self
+    {
+        let (r_sin, r_cos) = rotation.sin_cos();
+
+        Point2{
+            x: r_cos * self.x + r_sin * self.y,
+            y: r_cos * self.y - r_sin * self.x
+        }
+    }
+
     pub fn abs(self) -> Self
     {
         Self{
