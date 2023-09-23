@@ -1,0 +1,4 @@
+/target
+/*.txt
+/cachegrind*
+/graph.ppm
