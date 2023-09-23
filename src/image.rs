@@ -6,6 +6,8 @@ use std::{
     ops::{Index, IndexMut}
 };
 
+use crate::Point2;
+
 
 #[derive(Clone, Copy)]
 pub struct Color
@@ -127,7 +129,7 @@ pub struct DeferredSDFDrawer<'a>
 
 impl<'a> DeferredSDFDrawer<'a>
 {
-    pub fn line(&mut self, p0: (f64, f64), p1: (f64, f64), thickness: f64, c: Color)
+    pub fn line(&mut self, p0: Point2<f64>, p1: Point2<f64>, thickness: f64, c: Color)
     {
         let p0 = self.image.with_aspect(p0);
         let p1 = self.image.with_aspect(p1);
@@ -162,6 +164,12 @@ impl<'a> DeferredSDFDrawer<'a>
     {
         self.image.sdf_lines(self.lines);
     }
+}
+
+struct PixelInfo
+{
+    pos: Point2<usize>,
+    interpolation: f64
 }
 
 pub struct PPMImage
@@ -214,14 +222,14 @@ impl PPMImage
         DeferredSDFDrawer{image: self, lines: Vec::new()}
     }
 
-    fn with_aspect(&self, point: (f64, f64)) -> (f64, f64)
+    fn with_aspect(&self, point: Point2<f64>) -> (f64, f64)
     {
         if self.width_bigger
         {
-            (point.0 * self.aspect, point.1)
+            (point.x * self.aspect, point.y)
         } else
         {
-            (point.0, point.1 * self.aspect)
+            (point.x, point.y * self.aspect)
         }
     }
 
@@ -232,10 +240,10 @@ impl PPMImage
         {
             for x in 0..self.width
             {
-                let curr = (
-                    x as f64 / self.width as f64,
-                    1.0 - (y as f64 / self.height as f64)
-                );
+                let curr = Point2{
+                    x: x as f64 / self.width as f64,
+                    y: 1.0 - (y as f64 / self.height as f64)
+                };
 
                 let curr = self.with_aspect(curr);
 
@@ -290,6 +298,15 @@ impl PPMImage
                 i += 1;
             }
         }
+    }
+
+    pub fn triangle()
+    {
+    }
+
+    fn line_pixels(&self, p0: (f64, f64), p1: (f64, f64)) -> Vec<PixelInfo>
+    {
+        todo!();
     }
 
     pub fn line(&mut self, p0: (f64, f64), p1: (f64, f64), c: Color)

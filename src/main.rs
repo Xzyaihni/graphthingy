@@ -4,6 +4,9 @@ use graph::{GrapherConfig, Grapher};
 use config::Config;
 
 pub use image::{PPMImage, DeferredSDFDrawer, Color};
+pub use point::Point2;
+
+mod point;
 
 mod graph;
 mod image;

@@ -5,10 +5,10 @@ use std::{
     path::Path
 };
 
-use crate::{PPMImage, DeferredSDFDrawer, Color};
+use crate::{PPMImage, DeferredSDFDrawer, Color, Point2};
 
 
-type PointType = (f64, f64);
+type PointType = Point2<f64>;
 
 pub struct Graph
 {
@@ -32,7 +32,7 @@ impl Graph
     {
         self.points.push(p);
 
-        let (_x, y) = p;
+        let Point2{x: _x, y} = p;
 
         self.lowest_point = Some(self.lowest_point.map(|lowest|
         {
@@ -143,7 +143,7 @@ impl Grapher
             let value: f64 = line.trim().parse()?;
 
             x += x_step;
-            this_graph.push((x, value));
+            this_graph.push(Point2{x, y: value});
         }
 
         self.fit_graph(&this_graph);
@@ -156,7 +156,7 @@ impl Grapher
     {
         if let Some(last) = graph.last()
         {
-            self.right = self.right.max(last.0);
+            self.right = self.right.max(last.x);
             eprintln!("right: {}", self.right);
         }
 
@@ -165,14 +165,14 @@ impl Grapher
         let mut average = 0.0;
         graph.points().iter().for_each(|point|
         {
-            self.top = self.top.max(point.1);
+            self.top = self.top.max(point.y);
 
             if self.config.min_avg.is_some()
             {
-                average += point.1;
+                average += point.y;
             }
 
-            lowest = lowest.min(point.1);
+            lowest = lowest.min(point.y);
         });
 
         eprintln!("bottom: {lowest}");
@@ -193,15 +193,15 @@ impl Grapher
         }
     }
 
-    fn to_local(&self, point: &(f64, f64), pad: (f64, f64)) -> (f64, f64)
+    fn to_local(&self, point: &Point2<f64>, pad: Point2<f64>) -> Point2<f64>
     {
         Self::fit(&self.position(&point), pad)
     }
 
-    fn position(&self, point: &(f64, f64)) -> (f64, f64)
+    fn position(&self, point: &Point2<f64>) -> Point2<f64>
     {
-        let x = (point.0 - self.left) / (self.right - self.left);
-        let y = (point.1 - self.bottom) / (self.top - self.bottom);
+        let x = (point.x - self.left) / (self.right - self.left);
+        let y = (point.y - self.bottom) / (self.top - self.bottom);
 
         let y = if let Some(scale) = self.config.log_scale
         {
@@ -211,15 +211,12 @@ impl Grapher
             y
         };
 
-        (x, y)
+        Point2{x, y}
     }
 
-    fn fit(point: &(f64, f64), pad: (f64, f64)) -> (f64, f64)
+    fn fit(point: &Point2<f64>, pad: Point2<f64>) -> Point2<f64>
     {
-        (
-            point.0 * (1.0 - pad.0 * 2.0) + pad.0,
-            point.1 * (1.0 - pad.1 * 2.0) + pad.1
-        )
+        point * ((-pad * 2.0) + 1.0) + pad
     }
 
     pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()>
@@ -231,8 +228,8 @@ impl Grapher
 
         let aspect = width as f64 / height as f64;
 
-        let mut pad = (0.05, 0.05);
-        pad.0 = pad.0 / aspect;
+        let mut pad = Point2{x: 0.05, y: 0.05};
+        pad.x = pad.x / aspect;
 
         let pad = pad;
 
@@ -244,11 +241,11 @@ impl Grapher
         {
             if let Some(lowest) = graph.lowest()
             {
-                let left = (0.0, lowest);
-                let right = (0.0, lowest);
+                let left = Point2{x: 0.0, y: lowest};
+                let right = Point2{x: 0.0, y: lowest};
 
-                let left = (0.0, self.position(&left).1);
-                let right = (1.0, self.position(&right).1);
+                let left = Point2{x: 0.0, y: self.position(&left).y};
+                let right = Point2{x: 1.0, y: self.position(&right).y};
 
                 sdf_drawer.line(Self::fit(&left, pad), Self::fit(&right, pad), thickness, c);
             }
@@ -280,7 +277,7 @@ impl Grapher
         &self,
         sdf_drawer: &mut DeferredSDFDrawer,
         graph: &Graph,
-        pad: (f64, f64),
+        pad: Point2<f64>,
         thickness: f64,
         c: Color
     )
@@ -294,9 +291,9 @@ impl Grapher
         }
     }
 
-    fn draw_borders(sdf_drawer: &mut DeferredSDFDrawer, pad: (f64, f64), thickness: f64, c: Color)
+    fn draw_borders(sdf_drawer: &mut DeferredSDFDrawer, pad: Point2<f64>, thickness: f64, c: Color)
     {
-        sdf_drawer.line(pad, (pad.0, 1.0 - pad.1), thickness, c);
-        sdf_drawer.line(pad, (1.0 - pad.0, pad.1), thickness, c);
+        sdf_drawer.line(pad, Point2{x: pad.x, y: 1.0 - pad.y}, thickness, c);
+        sdf_drawer.line(pad, Point2{x: 1.0 - pad.x, y: pad.y}, thickness, c);
     }
 }
