@@ -238,7 +238,7 @@ impl Grapher
         let border_color = Color::black();
 
         {
-            let l = 220;
+            let l = 235;
             let c = Color{r: l, g: l, b: l};
 
             Self::draw_guides(&mut image, pad, thickness * 0.75, border_color, c);
@@ -338,8 +338,14 @@ impl Grapher
         let half_thickness = original_thickness * 0.5;
 
         line_at(image, 0.5, original_thickness);
-        line_at(image, 0.25, half_thickness);
-        line_at(image, 0.75, half_thickness);
+
+        let divisions = 10;
+        let step = 0.5 / divisions as f64;
+        for i in 1..divisions
+        {
+            line_at(image, i as f64 * step, half_thickness);
+            line_at(image, 0.5 + i as f64 * step, half_thickness);
+        }
 
         cap_at(image, 0.0, original_thickness);
         cap_at(image, 1.0, original_thickness);
