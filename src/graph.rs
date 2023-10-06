@@ -234,6 +234,15 @@ impl Grapher
         let pad = pad;
 
         let mut image = PPMImage::new(width, height, Color::white());
+
+        let border_color = Color::black();
+
+        {
+            let l = 220;
+            let c = Color{r: l, g: l, b: l};
+
+            Self::draw_guides(&mut image, pad, thickness * 0.75, border_color, c);
+        }
         
         let c = Color{r: 210, g: 210, b: 210};
         for graph in &self.graphs
@@ -250,7 +259,7 @@ impl Grapher
             }
         }
         
-        Self::draw_borders(&mut image, pad, thickness, Color::black());
+        Self::draw_borders(&mut image, pad, thickness, border_color);
 
         let mut colors = vec![
             Color{r: 255, g: 120, b: 120},
@@ -286,6 +295,54 @@ impl Grapher
         {
             image.line_thick(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
         }
+    }
+
+    fn draw_guides(
+        image: &mut PPMImage,
+        pad: Point2<f64>,
+        original_thickness: f64,
+        border_color: Color,
+        c: Color
+    )
+    {
+        let lerp = |a: f64, b: f64, t: f64|
+        {
+            a * (1.0 - t) + b * t
+        };
+
+        let cap_at = |image: &mut PPMImage, y: f64, thickness: f64|
+        {
+            let y = lerp(pad.y, 1.0 - pad.y, y);
+
+            let thickness_ratio = thickness / original_thickness;
+            let guide_width = pad.x * 0.5 * thickness_ratio;
+            image.line_thick(
+                Point2{x: pad.x - guide_width, y},
+                Point2{x: pad.x + guide_width, y},
+                thickness,
+                border_color
+            );
+        };
+
+        let line_at = |image: &mut PPMImage, y: f64, thickness: f64|
+        {
+            {
+                let y = lerp(pad.y, 1.0 - pad.y, y);
+
+                image.line_thick(Point2{x: pad.x, y}, Point2{x: 1.0 - pad.x, y}, thickness, c);
+            }
+
+            cap_at(image, y, thickness);
+        };
+
+        let half_thickness = original_thickness * 0.5;
+
+        line_at(image, 0.5, original_thickness);
+        line_at(image, 0.25, half_thickness);
+        line_at(image, 0.75, half_thickness);
+
+        cap_at(image, 0.0, original_thickness);
+        cap_at(image, 1.0, original_thickness);
     }
 
     fn draw_borders(image: &mut PPMImage, pad: Point2<f64>, thickness: f64, c: Color)
