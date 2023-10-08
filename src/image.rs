@@ -9,6 +9,11 @@ use std::{
 use crate::Point2;
 
 
+pub trait ColorRepr: Copy
+{
+    fn set(self, previous: Color) -> Color;
+}
+
 #[derive(Clone, Copy)]
 pub struct Color
 {
@@ -53,6 +58,85 @@ impl Color
     fn lerp_single(a: u8, b: u8, lerp: f32) -> u8
     {
         ((a as f32) * (1.0 - lerp) + (b as f32) * lerp) as u8
+    }
+}
+
+impl From<ColorAlpha> for Color
+{
+    fn from(value: ColorAlpha) -> Self
+    {
+        Self{
+            r: value.r,
+            g: value.g,
+            b: value.b
+        }
+    }
+}
+
+impl ColorRepr for Color
+{
+    fn set(self, _previous: Color) -> Color
+    {
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ColorAlpha
+{
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8
+}
+
+#[allow(dead_code)]
+impl ColorAlpha
+{
+    pub fn black() -> Self
+    {
+        Self{r: 0, g: 0, b: 0, a: 255}
+    }
+
+    pub fn white() -> Self
+    {
+        Self{r: 255, g: 255, b: 255, a: 255}
+    }
+
+    pub fn lerp(self, other: Self, amount: f32) -> Self
+    {
+        Self{
+            r: Self::lerp_single(self.r, other.r, amount),
+            g: Self::lerp_single(self.g, other.g, amount),
+            b: Self::lerp_single(self.b, other.b, amount),
+            a: Self::lerp_single(self.a, other.a, amount)
+        }
+    }
+
+    fn lerp_single(a: u8, b: u8, lerp: f32) -> u8
+    {
+        ((a as f32) * (1.0 - lerp) + (b as f32) * lerp) as u8
+    }
+}
+
+impl From<Color> for ColorAlpha
+{
+    fn from(value: Color) -> Self
+    {
+        Self{
+            r: value.r,
+            g: value.g,
+            b: value.b,
+            a: 255
+        }
+    }
+}
+
+impl ColorRepr for ColorAlpha
+{
+    fn set(self, previous: Color) -> Color
+    {
+        Color::from(self).lerp(previous, 1.0 - (self.a as f32 / u8::MAX as f32))
     }
 }
 
@@ -298,7 +382,13 @@ impl PPMImage
         }
     }
 
-    pub fn line_thick(&mut self, p0: Point2<f64>, p1: Point2<f64>, thickness: f64, c: Color)
+    pub fn line_thick(
+        &mut self,
+        p0: Point2<f64>,
+        p1: Point2<f64>,
+        thickness: f64,
+        c: impl ColorRepr
+    )
     {
         let diff = p1 - p0;
         let angle = -diff.y.atan2(diff.x);
@@ -322,12 +412,24 @@ impl PPMImage
         self.triangle(p1 + right, p1 + up, p1 - up, c);
     }
 
-    pub fn triangle(&mut self, p0: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, c: Color)
+    pub fn triangle(
+        &mut self,
+        p0: Point2<f64>,
+        p1: Point2<f64>,
+        p2: Point2<f64>,
+        c: impl ColorRepr
+    )
     {
         self.triangle_local(self.to_local(p0), self.to_local(p1), self.to_local(p2), c);
     }
 
-    fn triangle_local(&mut self, p0: Point2<usize>, p1: Point2<usize>, p2: Point2<usize>, c: Color)
+    fn triangle_local(
+        &mut self,
+        p0: Point2<usize>,
+        p1: Point2<usize>,
+        p2: Point2<usize>,
+        c: impl ColorRepr
+    )
     {
         let y_lowest = p0.y.min(p1.y.min(p2.y));
         let y_highest = p0.y.max(p1.y.max(p2.y));
@@ -354,7 +456,8 @@ impl PPMImage
             for x in low..=high
             {
                 let point = Point2{x, y};
-                self[point] = c;
+
+                self[point] = c.set(self[point]);
             }
         }
     }

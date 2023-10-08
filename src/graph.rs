@@ -10,19 +10,57 @@ use crate::{PPMImage, Color, Point2};
 
 type PointType = Point2<f64>;
 
+struct RunningAverage
+{
+    amount: u32,
+    values: Vec<f64>
+}
+
+impl RunningAverage
+{
+    pub fn new(amount: u32) -> Self
+    {
+        Self{
+            amount,
+            values: Vec::new()
+        }
+    }
+
+    pub fn push(&mut self, points: &[PointType])
+    {
+        let take_amount = points.len().min(self.amount as usize);
+
+        let s: f64 = points.iter().map(|point|
+        {
+            point.y
+        }).rev().take(take_amount).sum();
+
+        let value = s / take_amount as f64;
+
+        self.values.push(value);
+    }
+
+    pub fn values(&self) -> &[f64]
+    {
+        &self.values
+    }
+}
+
 pub struct Graph
 {
     points: Vec<PointType>,
+    running_avg: Option<RunningAverage>,
     lowest_point: Option<f64>,
     highest_point: Option<f64>
 }
 
 impl Graph
 {
-    pub fn new() -> Self
+    pub fn new(running_avg: Option<u32>) -> Self
     {
         Self{
             points: Vec::new(),
+            running_avg: running_avg.map(|amount| RunningAverage::new(amount)),
             lowest_point: None,
             highest_point: None
         }
@@ -31,6 +69,10 @@ impl Graph
     pub fn push(&mut self, p: PointType)
     {
         self.points.push(p);
+        if let Some(running_avg) = self.running_avg.as_mut()
+        {
+            running_avg.push(&self.points);
+        }
 
         let Point2{x: _x, y} = p;
 
@@ -78,6 +120,11 @@ impl Graph
         &self.points
     }
 
+    pub fn averages(&self) -> Option<&[f64]>
+    {
+        self.running_avg.as_ref().map(|running_avg| running_avg.values())
+    }
+
     #[allow(dead_code)]
     pub fn first(&self) -> Option<PointType>
     {
@@ -88,7 +135,8 @@ impl Graph
 pub struct GrapherConfig
 {
     pub log_scale: Option<f64>,
-    pub min_avg: Option<f64>
+    pub min_avg: Option<f64>,
+    pub running_avg: Option<u32>
 }
 
 #[allow(dead_code)]
@@ -124,7 +172,7 @@ impl Grapher
         let mut x_step = 1.0;
         let mut x = 0.0;
 
-        let mut this_graph = Graph::new();
+        let mut this_graph = Graph::new(self.config.running_avg);
 
         for line in reader.lines()
         {
@@ -294,6 +342,32 @@ impl Grapher
         for (input, output) in pairs
         {
             image.line_thick(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
+        }
+
+        let averages = graph.averages();
+        if let Some(values) = averages
+        {
+            let values = values.iter().zip(points).map(|(value, point)|
+            {
+                Point2{
+                    x: point.x,
+                    y: *value
+                }
+            });
+
+            let average_pairs = values.clone().zip(values.skip(1));
+
+            let avg_c = Color::white().lerp(c, 0.6);
+
+            for (input, output) in average_pairs
+            {
+                image.line_thick(
+                    self.to_local(&input, pad),
+                    self.to_local(&output, pad),
+                    thickness,
+                    avg_c
+                );
+            }
         }
     }
 

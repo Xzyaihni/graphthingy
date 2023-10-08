@@ -3,7 +3,7 @@ use std::env;
 use graph::{GrapherConfig, Grapher};
 use config::Config;
 
-pub use image::{PPMImage, DeferredSDFDrawer, Color};
+pub use image::{PPMImage, DeferredSDFDrawer, Color, ColorAlpha};
 pub use point::Point2;
 
 mod point;
@@ -19,7 +19,8 @@ fn main()
 
     let grapher_config = GrapherConfig{
         log_scale: config.log_scale,
-        min_avg: config.min_avg
+        min_avg: config.min_avg,
+        running_avg: config.running_avg
     };
 
     let mut grapher = Grapher::new(grapher_config);

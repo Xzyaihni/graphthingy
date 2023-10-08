@@ -12,6 +12,7 @@ pub struct Config
 {
     pub log_scale: Option<f64>,
     pub min_avg: Option<f64>,
+    pub running_avg: Option<u32>,
     pub paths: Vec<String>
 }
 
@@ -21,6 +22,7 @@ impl Config
     {
         let mut log_scale = None;
         let mut min_avg = None;
+        let mut running_avg = None;
         let mut paths = Vec::new();
 
         while let Some(arg) = args.next()
@@ -35,6 +37,10 @@ impl Config
                 {
                     min_avg = Some(Self::parse_number(&mut args, arg)?);
                 },
+                "-r" | "--running-avg" =>
+                {
+                    running_avg = Some(Self::parse_number(&mut args, arg)?);
+                },
                 _ =>
                 {
                     paths.push(arg);
@@ -45,6 +51,7 @@ impl Config
         Ok(Self{
             log_scale,
             min_avg,
+            running_avg,
             paths
         })
     }
