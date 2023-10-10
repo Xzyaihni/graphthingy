@@ -137,6 +137,7 @@ pub struct GrapherConfig
     pub log_scale: Option<f64>,
     pub min_avg: Option<f64>,
     pub min_height: Option<f64>,
+    pub max_height: Option<f64>,
     pub running_avg: Option<u32>
 }
 
@@ -214,7 +215,13 @@ impl Grapher
         let mut average = 0.0;
         graph.points().iter().for_each(|point|
         {
-            self.top = self.top.max(point.y);
+            if let Some(max_height) = self.config.max_height
+            {
+                self.top = max_height;
+            } else
+            {
+                self.top = self.top.max(point.y);
+            }
 
             if self.config.min_avg.is_some()
             {

@@ -14,6 +14,7 @@ pub struct Config
     pub log_scale: Option<f64>,
     pub min_avg: Option<f64>,
     pub min_height: Option<f64>,
+    pub max_height: Option<f64>,
     pub running_avg: Option<u32>,
     pub paths: Vec<String>
 }
@@ -25,6 +26,7 @@ impl Config
         let mut log_scale = None;
         let mut min_avg = None;
         let mut min_height = None;
+        let mut max_height = None;
         let mut running_avg = None;
         let mut paths = Vec::new();
 
@@ -43,6 +45,10 @@ impl Config
                 "-m" | "--min" =>
                 {
                     min_height = Some(Self::parse_number(&mut args, arg)?);
+                },
+                "-M" | "--max" =>
+                {
+                    max_height = Some(Self::parse_number(&mut args, arg)?);
                 },
                 "-r" | "--running-avg" =>
                 {
@@ -67,6 +73,7 @@ impl Config
             log_scale,
             min_avg,
             min_height,
+            max_height,
             running_avg,
             paths
         })

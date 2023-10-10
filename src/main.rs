@@ -21,6 +21,7 @@ fn main()
         log_scale: config.log_scale,
         min_avg: config.min_avg,
         min_height: config.min_height,
+        max_height: config.max_height,
         running_avg: config.running_avg
     };
 
