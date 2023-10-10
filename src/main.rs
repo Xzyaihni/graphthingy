@@ -20,6 +20,7 @@ fn main()
     let grapher_config = GrapherConfig{
         log_scale: config.log_scale,
         min_avg: config.min_avg,
+        min_height: config.min_height,
         running_avg: config.running_avg
     };
 

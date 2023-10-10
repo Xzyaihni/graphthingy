@@ -136,6 +136,7 @@ pub struct GrapherConfig
 {
     pub log_scale: Option<f64>,
     pub min_avg: Option<f64>,
+    pub min_height: Option<f64>,
     pub running_avg: Option<u32>
 }
 
@@ -204,8 +205,8 @@ impl Grapher
     {
         if let Some(last) = graph.last()
         {
+            eprintln!("right: {}", last.x);
             self.right = self.right.max(last.x);
-            eprintln!("right: {}", self.right);
         }
 
         let mut lowest = f64::MAX;
@@ -225,7 +226,10 @@ impl Grapher
 
         eprintln!("bottom: {lowest}");
 
-        if self.bottom > lowest
+        if let Some(min_height) = self.config.min_height
+        {
+            self.bottom = min_height;
+        } else if self.bottom > lowest
         {
             self.bottom = if let Some(scale) = self.config.min_avg
             {
