@@ -1,4 +1,5 @@
 use std::{
+    f64,
     mem,
     io::{self, Write},
     fs::File,
@@ -393,23 +394,53 @@ impl PPMImage
         let diff = p1 - p0;
         let angle = -diff.y.atan2(diff.x);
 
-        let direction = |raw: Point2<f64>|
+        // borrow checker why r u like this
+        let direction = |this: &Self, raw: Point2<f64>|
         {
             let direction = raw.rotate(angle);
 
-            self.without_aspect(direction) * thickness
+            this.without_aspect(direction) * thickness
         };
 
-        let up = direction(Point2{x: 0.0, y: 1.0});
-        let right = direction(Point2{x: 1.0, y: 0.0});
+        let up = direction(self, Point2{x: 0.0, y: 1.0});
+
+        // the caps
+        let cap_points = 3;
+
+        for i in 0..cap_points
+        {
+            let (middle, end, middle_n, end_n) = {
+                let point_at = |i, x_scale|
+                {
+                    // where the point is from 0 to 1
+                    let p_n = i as f64 / (cap_points + 1) as f64;
+
+                    // where the point is from -1 to 1
+                    let p_s = p_n * 2.0 - 1.0;
+                    
+                    let p = p_n * f64::consts::PI;
+
+                    let up = p_s;
+                    let right = p.sin() * x_scale;
+
+                    let point = Point2{x: right, y: up};
+
+                    direction(self, point)
+                };
+
+                (
+                    point_at(i + 1, 1.0), point_at(i + 2, 1.0),
+                    point_at(i + 1, -1.0), point_at(i + 2, -1.0)
+                )
+            };
+
+            self.triangle(p0 - up, p0 + middle_n, p0 + end_n, c);
+            self.triangle(p1 - up, p1 + middle, p1 + end, c);
+        }
 
         // the line
         self.triangle(p0 + up, p1 + up, p0 - up, c);
         self.triangle(p0 - up, p1 + up, p1 - up, c);
-
-        // the caps
-        self.triangle(p0 - right, p0 + up, p0 - up, c);
-        self.triangle(p1 + right, p1 + up, p1 - up, c);
     }
 
     pub fn triangle(
