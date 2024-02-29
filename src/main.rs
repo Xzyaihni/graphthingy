@@ -3,7 +3,7 @@ use std::env;
 use graph::{GrapherConfig, Grapher};
 use config::Config;
 
-pub use image::{PPMImage, DeferredSDFDrawer, Color, ColorAlpha};
+pub use image::{PPMImage, DeferredSDFDrawer, Color, ColorRepr, ColorAlpha};
 pub use point::Point2;
 
 mod point;

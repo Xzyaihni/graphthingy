@@ -5,7 +5,7 @@ use std::{
     path::Path
 };
 
-use crate::{PPMImage, Color, ColorAlpha, Point2};
+use crate::{PPMImage, Color, ColorRepr, ColorAlpha, Point2};
 
 
 type PointType = Point2<f64>;
@@ -410,7 +410,7 @@ impl Grapher
 
         for point in points
         {
-            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 127};
+            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 90}.set(c);
 
             image.circle(self.to_local(point, pad), thickness * 1.5, point_color);
         }
