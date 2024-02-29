@@ -476,6 +476,7 @@ impl Grapher
         let half_thickness = original_thickness * 0.5;
 
         line_at(image, 0.5, original_thickness);
+        line_at(image, 1.0, original_thickness);
 
         let divisions = 10;
         let step = 0.5 / divisions as f64;
