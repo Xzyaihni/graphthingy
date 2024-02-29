@@ -26,6 +26,7 @@ impl RunningAverage
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool
     {
         self.values.is_empty()
@@ -202,7 +203,7 @@ impl Grapher
     }
 
     #[allow(dead_code)]
-    pub fn from_graphs(mut graphs: Vec<Graph>, config: GrapherConfig) -> Self
+    pub fn from_graphs(graphs: Vec<Graph>, config: GrapherConfig) -> Self
     {
         let mut this = Self::new(config);
 
