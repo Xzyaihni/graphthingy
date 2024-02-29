@@ -180,6 +180,21 @@ impl Grapher
         }
     }
 
+    #[allow(dead_code)]
+    pub fn from_graphs(graphs: Vec<Graph>, config: GrapherConfig) -> Self
+    {
+        let mut this = Self::new(config);
+
+        graphs.iter().for_each(|graph|
+        {
+            this.fit_graph(graph);
+        });
+
+        this.graphs = graphs;
+
+        this
+    }
+
     pub fn parse(&mut self, path: impl AsRef<Path>) -> Result<(), Box<dyn Error>>
     {
         let f = File::open(path)?;
