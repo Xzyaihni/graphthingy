@@ -141,6 +141,20 @@ pub struct GrapherConfig
     pub running_avg: Option<u32>
 }
 
+impl Default for GrapherConfig
+{
+    fn default() -> Self
+    {
+        Self{
+            log_scale: None,
+            min_avg: None,
+            min_height: None,
+            max_height: None,
+            running_avg: None
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct Grapher
 {
