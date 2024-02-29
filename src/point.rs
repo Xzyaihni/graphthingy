@@ -14,7 +14,7 @@ use std::{
 };
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Point2<T>
 {
     pub x: T,
@@ -26,6 +26,13 @@ impl<T> Point2<T>
     pub fn new(x: T, y: T) -> Self
     {
         Self{x, y}
+    }
+
+    pub fn repeat(x: T) -> Self
+    where
+        T: Clone
+    {
+        Self{y: x.clone(), x}
     }
 
     pub fn cast<U: TryFrom<T>>(self) -> Point2<U>

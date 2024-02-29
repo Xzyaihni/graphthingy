@@ -4,6 +4,7 @@ use std::{
     io::{self, Write},
     fs::File,
     path::Path,
+    collections::HashSet,
     ops::{Index, IndexMut}
 };
 
@@ -443,6 +444,35 @@ impl PPMImage
         self.triangle(p0 - up, p1 + up, p1 - up, c);
     }
 
+    pub fn circle(&mut self, pos: Point2<f64>, size: f64, c: impl ColorRepr)
+    {
+        let lod = 9;
+
+        let pos_local = self.to_local(pos);
+        let pixels = (1..=lod).flat_map(|i|
+        {
+            let point_at = |i|
+            {
+                let i = i as f64 / lod as f64 * (2.0 * f64::consts::PI);
+
+                let size = self.without_aspect(Point2::repeat(size));
+                let point = Point2{x: i.sin(), y: i.cos()} * size + pos;
+
+                self.to_local(point)
+            };
+
+            let prev = point_at(i - 1);
+            let curr = point_at(i);
+
+            Self::triangle_pixels(prev, pos_local, curr)
+        }).collect::<HashSet<Point2<usize>>>();
+
+        pixels.into_iter().for_each(|pixel|
+        {
+            self[pixel] = c.set(self[pixel]);
+        });
+    }
+
     pub fn triangle(
         &mut self,
         p0: Point2<f64>,
@@ -462,6 +492,18 @@ impl PPMImage
         c: impl ColorRepr
     )
     {
+        Self::triangle_pixels(p0, p1, p2).into_iter().for_each(|point|
+        {
+            self[point] = c.set(self[point]);
+        });
+    }
+
+    pub fn triangle_pixels(
+        p0: Point2<usize>,
+        p1: Point2<usize>,
+        p2: Point2<usize>
+    ) -> Vec<Point2<usize>>
+    {
         let y_lowest = p0.y.min(p1.y.min(p2.y));
         let y_highest = p0.y.max(p1.y.max(p2.y));
 
@@ -476,10 +518,11 @@ impl PPMImage
             this_pair.1 = this_pair.1.max(pos.x);
         };
 
-        self.line_pixels(p0, p1).into_iter().for_each(&mut on_pixel);
-        self.line_pixels(p1, p2).into_iter().for_each(&mut on_pixel);
-        self.line_pixels(p2, p0).into_iter().for_each(on_pixel);
+        Self::line_pixels(p0, p1).into_iter().for_each(&mut on_pixel);
+        Self::line_pixels(p1, p2).into_iter().for_each(&mut on_pixel);
+        Self::line_pixels(p2, p0).into_iter().for_each(on_pixel);
 
+        let mut result = Vec::new();
         for (index, (low, high)) in low_high_pairs.into_iter().enumerate()
         {
             let y = index + y_lowest;
@@ -488,12 +531,14 @@ impl PPMImage
             {
                 let point = Point2{x, y};
 
-                self[point] = c.set(self[point]);
+                result.push(point);
             }
         }
+
+        result
     }
 
-    pub fn line_pixels(&self, p0: Point2<usize>, p1: Point2<usize>) -> Vec<Point2<usize>>
+    pub fn line_pixels(p0: Point2<usize>, p1: Point2<usize>) -> Vec<Point2<usize>>
     {
         let mut p0 = p0.cast::<i32>();
         let p1 = p1.cast::<i32>();

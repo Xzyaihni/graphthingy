@@ -5,7 +5,7 @@ use std::{
     path::Path
 };
 
-use crate::{PPMImage, Color, Point2};
+use crate::{PPMImage, Color, ColorAlpha, Point2};
 
 
 type PointType = Point2<f64>;
@@ -406,6 +406,13 @@ impl Grapher
         for (input, output) in pairs
         {
             image.line_thick(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
+        }
+
+        for point in points
+        {
+            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 127};
+
+            image.circle(self.to_local(point, pad), thickness * 1.5, point_color);
         }
 
         let averages = graph.averages();
