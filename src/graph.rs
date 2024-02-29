@@ -26,6 +26,11 @@ impl RunningAverage
         }
     }
 
+    pub fn is_empty(&self) -> bool
+    {
+        self.values.is_empty()
+    }
+
     pub fn push(&mut self, points: &[PointType])
     {
         let take_amount = points.len().min(self.amount as usize);
@@ -46,7 +51,44 @@ impl RunningAverage
     }
 }
 
-pub struct Graph
+pub struct Graph(GraphBuilder);
+
+impl Graph
+{
+    #[allow(dead_code)]
+    pub fn highest(&self) -> Option<f64>
+    {
+        self.0.highest_point
+    }
+
+    pub fn lowest(&self) -> Option<f64>
+    {
+        self.0.lowest_point
+    }
+
+    pub fn last(&self) -> Option<PointType>
+    {
+        self.0.points.last().copied()
+    }
+
+    pub fn points(&self) -> &[PointType]
+    {
+        &self.0.points
+    }
+
+    pub fn averages(&self) -> Option<&[f64]>
+    {
+        self.0.running_avg.as_ref().map(|running_avg| running_avg.values())
+    }
+
+    #[allow(dead_code)]
+    pub fn first(&self) -> Option<PointType>
+    {
+        self.0.points.first().copied()
+    }
+}
+
+pub struct GraphBuilder
 {
     points: Vec<PointType>,
     running_avg: Option<RunningAverage>,
@@ -54,7 +96,7 @@ pub struct Graph
     highest_point: Option<f64>
 }
 
-impl Graph
+impl GraphBuilder
 {
     pub fn new(running_avg: Option<u32>) -> Self
     {
@@ -69,10 +111,6 @@ impl Graph
     pub fn push(&mut self, p: PointType)
     {
         self.points.push(p);
-        if let Some(running_avg) = self.running_avg.as_mut()
-        {
-            running_avg.push(&self.points);
-        }
 
         let Point2{x: _x, y} = p;
 
@@ -99,36 +137,19 @@ impl Graph
         }).unwrap_or(y));
     }
 
-    #[allow(dead_code)]
-    pub fn highest(&self) -> Option<f64>
+    pub fn complete(mut self) -> Graph
     {
-        self.highest_point
-    }
+        self.points.sort_unstable_by(|a, b|
+        {
+            a.x.partial_cmp(&b.x).expect("values must be comparable")
+        });
 
-    pub fn lowest(&self) -> Option<f64>
-    {
-        self.lowest_point
-    }
+        if let Some(running_avg) = self.running_avg.as_mut()
+        {
+            (0..self.points.len()).for_each(|x| running_avg.push(&self.points[0..x]));
+        }
 
-    pub fn last(&self) -> Option<PointType>
-    {
-        self.points.last().copied()
-    }
-
-    pub fn points(&self) -> &[PointType]
-    {
-        &self.points
-    }
-
-    pub fn averages(&self) -> Option<&[f64]>
-    {
-        self.running_avg.as_ref().map(|running_avg| running_avg.values())
-    }
-
-    #[allow(dead_code)]
-    pub fn first(&self) -> Option<PointType>
-    {
-        self.points.first().copied()
+        Graph(self)
     }
 }
 
@@ -181,7 +202,7 @@ impl Grapher
     }
 
     #[allow(dead_code)]
-    pub fn from_graphs(graphs: Vec<Graph>, config: GrapherConfig) -> Self
+    pub fn from_graphs(mut graphs: Vec<Graph>, config: GrapherConfig) -> Self
     {
         let mut this = Self::new(config);
 
@@ -203,7 +224,7 @@ impl Grapher
         let mut x_step = 1.0;
         let mut x = 0.0;
 
-        let mut this_graph = Graph::new(self.config.running_avg);
+        let mut this_graph = GraphBuilder::new(self.config.running_avg);
 
         for line in reader.lines()
         {
@@ -224,6 +245,8 @@ impl Grapher
             x += x_step;
             this_graph.push(Point2{x, y: value});
         }
+
+        let this_graph = this_graph.complete();
 
         self.fit_graph(&this_graph);
         self.graphs.push(this_graph);
