@@ -8,12 +8,20 @@ use std::{
     ops::{Index, IndexMut}
 };
 
-use crate::Point2;
+use crate::{Font, FontChar, Point2};
 
 
 pub trait ColorRepr: Copy
 {
     fn set(self, previous: Color) -> Color;
+}
+
+impl ColorRepr for ()
+{
+    fn set(self, previous: Color) -> Color
+    {
+        previous
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -245,6 +253,54 @@ impl<'a> DeferredSDFDrawer<'a>
     }
 }
 
+struct CharInfo<'a>
+{
+    size: Point2<f64>,
+    position: Point2<f64>,
+    thickness: f64,
+    c: &'a FontChar
+}
+
+pub enum TextHAlign
+{
+    Left,
+    Right
+}
+
+pub enum TextVAlign
+{
+    Bottom,
+    Top
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingBox<T=f64>
+{
+    pub bottom_left: Point2<T>,
+    pub top_right: Point2<T>
+}
+
+impl BoundingBox<f64>
+{
+    pub fn area(&self) -> Point2<f64>
+    {
+        self.top_right - self.bottom_left
+    }
+}
+
+impl<T> BoundingBox<T>
+{
+    pub fn map<U, F>(self, mut f: F) -> BoundingBox<U>
+    where
+        F: FnMut(Point2<T>) -> Point2<U>
+    {
+        BoundingBox{
+            bottom_left: f(self.bottom_left),
+            top_right: f(self.top_right)
+        }
+    }
+}
+
 pub struct PPMImage
 {
     data: Vec<Color>,
@@ -288,6 +344,145 @@ impl PPMImage
 
         let data = self.data.iter().flat_map(|c| [c.r, c.g, c.b]).collect::<Vec<u8>>();
         f.write_all(&data)
+    }
+
+    pub fn text_between(
+        &mut self,
+        font: &Font,
+        color: impl ColorRepr,
+        bb: BoundingBox,
+        align_h: TextHAlign,
+        align_v: TextVAlign,
+        text: &str
+    )
+    {
+        let text_size = self.text_size(font, Point2::repeat(1.0), text);
+
+        let goal_size = bb.top_right - bb.bottom_left;
+
+        let size = goal_size / text_size;
+
+        let scale = if size.x > size.y
+        {
+            Point2{
+                x: size.y / size.x,
+                y: 1.0
+            }
+        } else
+        {
+            Point2{
+                x: 1.0,
+                y: size.x / size.y,
+            }
+        };
+
+        let real_size = goal_size * scale;
+
+        // keep aspect ratio
+        let size = size.x.min(size.y);
+
+        let pos = match align_h
+        {
+            TextHAlign::Left => bb.bottom_left,
+            TextHAlign::Right =>
+            {
+                Point2{
+                    x: bb.top_right.x - real_size.x,
+                    y: bb.bottom_left.y
+                }
+            }
+        };
+
+        let pos = match align_v
+        {
+            TextVAlign::Bottom => pos,
+            TextVAlign::Top =>
+            {
+                Point2{
+                    x: bb.bottom_left.x,
+                    y: bb.top_right.y - real_size.y
+                }
+            }
+        };
+
+        self.text(font, color, pos, Point2::repeat(size), text);
+    }
+
+    pub fn text_size(
+        &mut self,
+        font: &Font,
+        size: Point2<f64>,
+        text: &str
+    ) -> Point2<f64>
+    {
+        // good enough
+        self.text(font, (), Point2::repeat(0.0), size, text).top_right
+    }
+
+    pub fn text(
+        &mut self,
+        font: &Font,
+        color: impl ColorRepr,
+        position: Point2<f64>,
+        size: Point2<f64>,
+        text: &str
+    ) -> BoundingBox
+    {
+        let mut bb = BoundingBox{
+            bottom_left: position,
+            top_right: position
+        };
+
+        self.text_char_positions(font, position, size, text)
+            .for_each(|CharInfo{size, position, thickness, c}|
+            {
+                c.lines().iter().for_each(|line|
+                {
+                    let to_local = |mut p: Point2<f64>|
+                    {
+                        p.x *= c.width();
+
+                        position + p * size
+                    };
+
+                    self.line_thick(
+                        to_local(line.start),
+                        to_local(line.end),
+                        thickness,
+                        color
+                    );
+                });
+
+                bb.top_right = Point2{
+                    x: position.x + (c.width() * size.x),
+                    y: bb.top_right.y.max(bb.bottom_left.y + size.y)
+                };
+            });
+
+        bb
+    }
+
+    fn text_char_positions<'a, 'b>(
+        &'b mut self,
+        font: &'a Font,
+        mut position: Point2<f64>,
+        size: Point2<f64>,
+        text: &'a str
+    ) -> impl Iterator<Item=CharInfo<'a>> + 'a
+    {
+        let thickness = size.x.min(size.y) * 0.05;
+
+        let size = self.without_aspect(size);
+
+        let mut step_size = 0.0;
+        text.chars().filter_map(|c| font.get(c)).map(move |c|
+        {
+            // all this weirdness to not add step_size at the last char
+            position.x += step_size;
+            step_size = c.total_step() * size.x;
+
+            CharInfo{size, position, thickness, c}
+        })
     }
 
     pub fn sdf_drawer(&mut self) -> DeferredSDFDrawer
@@ -442,6 +637,21 @@ impl PPMImage
         // the line
         self.triangle(p0 + up, p1 + up, p0 - up, c);
         self.triangle(p0 - up, p1 + up, p1 - up, c);
+    }
+
+    pub fn fill(&mut self, bb: BoundingBox, c: impl ColorRepr)
+    {
+        let bb = bb.map(|x| self.to_local(x));
+
+        for y in bb.top_right.y..bb.bottom_left.y
+        {
+            for x in bb.bottom_left.x..bb.top_right.x
+            {
+                let pos = Point2{x, y};
+
+                self[pos] = c.set(self[pos]);
+            }
+        }
     }
 
     pub fn circle(&mut self, pos: Point2<f64>, size: f64, c: impl ColorRepr)

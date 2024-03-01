@@ -3,10 +3,22 @@ use std::env;
 use graph::{GrapherConfig, Grapher};
 use config::Config;
 
-pub use image::{PPMImage, DeferredSDFDrawer, Color, ColorRepr, ColorAlpha};
+pub use image::{
+    PPMImage,
+    DeferredSDFDrawer,
+    Color,
+    ColorRepr,
+    ColorAlpha,
+    BoundingBox,
+    TextHAlign,
+    TextVAlign
+};
+
 pub use point::Point2;
+pub use font::{Font, FontChar};
 
 mod point;
+mod font;
 
 mod graph;
 mod image;
@@ -22,7 +34,8 @@ fn main()
         min_avg: config.min_avg,
         min_height: config.min_height,
         max_height: config.max_height,
-        running_avg: config.running_avg
+        running_avg: config.running_avg,
+        ..Default::default()
     };
 
     let mut grapher = Grapher::new(grapher_config);
@@ -32,5 +45,5 @@ fn main()
         grapher.parse(data).unwrap();
     }
 
-    grapher.save("graph.ppm").unwrap();
+    grapher.save(Point2{x: 4000, y: 2000}, "graph.ppm").unwrap();
 }

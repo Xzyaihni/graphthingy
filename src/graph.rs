@@ -5,7 +5,17 @@ use std::{
     path::Path
 };
 
-use crate::{PPMImage, Color, ColorRepr, ColorAlpha, Point2};
+use crate::{
+    PPMImage,
+    Font,
+    Color,
+    ColorRepr,
+    ColorAlpha,
+    BoundingBox,
+    TextHAlign,
+    TextVAlign,
+    Point2
+};
 
 
 type PointType = Point2<f64>;
@@ -160,7 +170,8 @@ pub struct GrapherConfig
     pub min_avg: Option<f64>,
     pub min_height: Option<f64>,
     pub max_height: Option<f64>,
-    pub running_avg: Option<u32>
+    pub running_avg: Option<u32>,
+    pub font: Font
 }
 
 impl Default for GrapherConfig
@@ -172,10 +183,13 @@ impl Default for GrapherConfig
             min_avg: None,
             min_height: None,
             max_height: None,
-            running_avg: None
+            running_avg: None,
+            font: Font::default()
         }
     }
 }
+
+type Padding = BoundingBox;
 
 #[allow(dead_code)]
 pub struct Grapher
@@ -305,7 +319,7 @@ impl Grapher
         }
     }
 
-    fn to_local(&self, point: &Point2<f64>, pad: Point2<f64>) -> Point2<f64>
+    fn to_local(&self, point: &Point2<f64>, pad: Padding) -> Point2<f64>
     {
         Self::fit(&self.position(&point), pad)
     }
@@ -326,34 +340,36 @@ impl Grapher
         Point2{x, y}
     }
 
-    fn fit(point: &Point2<f64>, pad: Point2<f64>) -> Point2<f64>
+    fn fit(point: &Point2<f64>, pad: Padding) -> Point2<f64>
     {
-        point * ((-pad * 2.0) + 1.0) + pad
+        point * pad.area() + pad.bottom_left
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()>
+    pub fn save(&self, size: Point2<usize>, path: impl AsRef<Path>) -> io::Result<()>
     {
-        let width = 4000;
-        let height = 2000;
+        let width = size.x;
+        let height = size.y;
 
         let thickness = 0.005;
 
         let aspect = width as f64 / height as f64;
+        let pad = 0.025;
 
-        let mut pad = Point2{x: 0.05, y: 0.05};
-        pad.x = pad.x / aspect;
-
-        let pad = pad;
+        let pad = Padding{
+            bottom_left: Point2{x: 0.2 / aspect, y: pad},
+            top_right: Point2{x: 1.0 - pad / aspect, y: 1.0 - pad}
+        };
 
         let mut image = PPMImage::new(width, height, Color::white());
 
+        let guide_size = 0.01;
         let border_color = Color::black();
 
         {
             let l = 235;
             let c = Color{r: l, g: l, b: l};
 
-            Self::draw_guides(&mut image, pad, thickness * 0.75, border_color, c);
+            Self::draw_guides(&mut image, pad, thickness * 0.75, guide_size, border_color, c);
         }
         
         let c = Color{r: 210, g: 210, b: 210};
@@ -381,21 +397,96 @@ impl Grapher
             Color{r: 255, g: 220, b: 120}
         ].into_iter();
 
+        let mut seed = 54321;
         for graph in &self.graphs
         {
-            let color = colors.next().expect("it should have enough colors");
+            let color = colors.next().unwrap_or_else(||
+            {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+
+                let random_u32 = seed;
+
+                let r = |i: u32|
+                {
+                    ((random_u32 >> (i * 8)) & 0xff) as u8
+                };
+
+                Color{r: r(0), g: r(1), b: r(2)}
+            });
 
             self.draw_graph(&mut image, graph, pad, thickness, color);
         }
 
+        self.draw_units(&mut image, pad, aspect, guide_size, Color::black());
+
         image.save(path)
+    }
+
+    fn draw_units(
+        &self,
+        image: &mut PPMImage,
+        pad: Padding,
+        aspect: f64,
+        guide_size: f64,
+        c: Color
+    )
+    {
+        // bottom text ecks dee
+        let bottom_text = format!("{:.4}", self.bottom);
+        let top_text = format!("{:.4}", self.top);
+
+        let mut bottom_left = Point2{
+            x: 0.02,
+            y: pad.bottom_left.y
+        };
+
+        bottom_left.x /= aspect;
+
+        let max_height = 0.05;
+
+        image.text_between(
+            &self.config.font,
+            c,
+            BoundingBox{
+                bottom_left,
+                top_right: Point2{
+                    x: pad.bottom_left.x - bottom_left.x - guide_size,
+                    y: max_height
+                }
+            },
+            TextHAlign::Right,
+            TextVAlign::Bottom,
+            &bottom_text
+        );
+
+        let bottom_left = Point2{
+            y: pad.top_right.y - max_height,
+            ..bottom_left
+        };
+
+        image.text_between(
+            &self.config.font,
+            c,
+            BoundingBox{
+                bottom_left,
+                top_right: Point2{
+                    x: pad.bottom_left.x - bottom_left.x - guide_size,
+                    y: pad.top_right.y
+                }
+            },
+            TextHAlign::Right,
+            TextVAlign::Top,
+            &top_text
+        );
     }
 
     fn draw_graph(
         &self,
         image: &mut PPMImage,
         graph: &Graph,
-        pad: Point2<f64>,
+        pad: Padding,
         thickness: f64,
         c: Color
     )
@@ -444,8 +535,9 @@ impl Grapher
 
     fn draw_guides(
         image: &mut PPMImage,
-        pad: Point2<f64>,
+        pad: Padding,
         original_thickness: f64,
+        guide_size: f64,
         border_color: Color,
         c: Color
     )
@@ -457,13 +549,13 @@ impl Grapher
 
         let cap_at = |image: &mut PPMImage, y: f64, thickness: f64|
         {
-            let y = lerp(pad.y, 1.0 - pad.y, y);
+            let y = lerp(pad.bottom_left.y, pad.top_right.y, y);
 
             let thickness_ratio = thickness / original_thickness;
-            let guide_width = pad.x * 0.5 * thickness_ratio;
+            let guide_width = guide_size * thickness_ratio.sqrt();
             image.line_thick(
-                Point2{x: pad.x - guide_width, y},
-                Point2{x: pad.x + guide_width, y},
+                Point2{x: pad.bottom_left.x - guide_width, y},
+                Point2{x: pad.bottom_left.x + guide_width, y},
                 thickness,
                 border_color
             );
@@ -472,15 +564,20 @@ impl Grapher
         let line_at = |image: &mut PPMImage, y: f64, thickness: f64|
         {
             {
-                let y = lerp(pad.y, 1.0 - pad.y, y);
+                let y = lerp(pad.bottom_left.y, pad.top_right.y, y);
 
-                image.line_thick(Point2{x: pad.x, y}, Point2{x: 1.0 - pad.x, y}, thickness, c);
+                image.line_thick(
+                    Point2{x: pad.bottom_left.x, y},
+                    Point2{x: pad.top_right.x, y},
+                    thickness,
+                    c
+                );
             }
 
             cap_at(image, y, thickness);
         };
 
-        let half_thickness = original_thickness * 0.5;
+        let half_thickness = original_thickness * 0.55;
 
         line_at(image, 0.5, original_thickness);
         line_at(image, 1.0, original_thickness);
@@ -497,9 +594,20 @@ impl Grapher
         cap_at(image, 1.0, original_thickness);
     }
 
-    fn draw_borders(image: &mut PPMImage, pad: Point2<f64>, thickness: f64, c: Color)
+    fn draw_borders(image: &mut PPMImage, pad: Padding, thickness: f64, c: Color)
     {
-        image.line_thick(pad, Point2{x: pad.x, y: 1.0 - pad.y}, thickness, c);
-        image.line_thick(pad, Point2{x: 1.0 - pad.x, y: pad.y}, thickness, c);
+        image.line_thick(
+            pad.bottom_left,
+            Point2{x: pad.bottom_left.x, y: pad.top_right.y},
+            thickness,
+            c
+        );
+
+        image.line_thick(
+            pad.bottom_left,
+            Point2{x: pad.top_right.x, y: pad.bottom_left.y},
+            thickness,
+            c
+        );
     }
 }
