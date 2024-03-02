@@ -349,8 +349,15 @@ impl Grapher
 
     pub fn to_image(&self, size: Point2<usize>) -> PPMImage
     {
-        let width = size.x;
-        let height = size.y;
+        let image = PPMImage::new(size.x, size.y, Color::white());
+
+        self.to_image_with(image)
+    }
+
+    pub fn to_image_with(&self, mut image: PPMImage) -> PPMImage
+    {
+        let width = image.width();
+        let height = image.height();
 
         let thickness = 0.005;
 
@@ -361,8 +368,6 @@ impl Grapher
             bottom_left: Point2{x: 0.2 / aspect, y: pad},
             top_right: Point2{x: 1.0 - pad / aspect, y: 1.0 - pad}
         };
-
-        let mut image = PPMImage::new(width, height, Color::white());
 
         let guide_size = 0.01;
         let border_color = Color::black();

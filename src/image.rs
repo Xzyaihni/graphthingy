@@ -331,6 +331,16 @@ impl PPMImage
         Self{data: vec![c; width * height], width, height, width_bigger, aspect}
     }
 
+    pub fn width(&self) -> usize
+    {
+        self.width
+    }
+
+    pub fn height(&self) -> usize
+    {
+        self.height
+    }
+
     pub fn blit(&mut self, other: Self, position: Point2<usize>)
     {
         for ty in 0..other.height
