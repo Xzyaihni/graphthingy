@@ -373,8 +373,10 @@ impl Grapher
         let border_color = Color::black();
 
         {
-            let l = 235;
-            let c = Color{r: l, g: l, b: l};
+            let c = ColorAlpha{
+                a: 15,
+                ..Color::black().into()
+            };
 
             Self::draw_guides(&mut image, pad, thickness * 0.75, guide_size, border_color, c);
         }
@@ -549,7 +551,7 @@ impl Grapher
         original_thickness: f64,
         guide_size: f64,
         border_color: Color,
-        c: Color
+        c: ColorAlpha
     )
     {
         let lerp = |a: f64, b: f64, t: f64|
