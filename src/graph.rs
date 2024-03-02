@@ -521,7 +521,10 @@ impl Grapher
 
             let average_pairs = values.clone().zip(values.skip(1));
 
-            let avg_c = Color::white().lerp(c, 0.6);
+            let avg_c = ColorAlpha{
+                a: 100,
+                ..Color::white().lerp(c, 0.6).into()
+            };
 
             for (input, output) in average_pairs
             {
