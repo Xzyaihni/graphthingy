@@ -73,30 +73,26 @@ impl Default for Font
                     .expect("move_to must be called with at least 1 line")
             }
 
-            pub fn move_to(mut self, position: Point2<f64>) -> Self
+            pub fn move_from(self, index: usize, position: Point2<f64>) -> Self
             {
-                let line = self.last();
+                let start = self.0[index].end;
 
-                let line = Line{
-                    start: line.end,
-                    end: position
-                };
-
-                self.0.push(line);
-
-                self
+                self.teleport(start, position)
             }
 
-            pub fn move_to_index(mut self, index: usize) -> Self
+            pub fn move_to(self, position: Point2<f64>) -> Self
             {
-                let line = Line{
-                    start: self.last().end,
-                    end: self.0[index].start
-                };
+                let start = self.last().end;
 
-                self.0.push(line);
+                self.teleport(start, position)
+            }
 
-                self
+            pub fn move_to_index(self, index: usize) -> Self
+            {
+                let start = self.last().end;
+                let end = self.0[index].start;
+
+                self.teleport(start, end)
             }
 
             pub fn build(self) -> Vec<Line>
@@ -112,12 +108,14 @@ impl Default for Font
             .move_to_index(1)
             .build();
 
+        // load a font? nah, id lose multiple hrs B)
         let chars = [
             ('0', FontChar{
                 lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 1.0, y: 1.0})
                     .move_to(Point2{x: 1.0, y: 0.0})
                     .move_to(Point2{x: 0.0, y: 0.0})
                     .move_to_index(0)
+                    .teleport(Point2{x: 0.0, y: 1.0}, Point2{x: 1.0, y: 0.0})
                     .build(),
                 width: 0.6,
                 step: default_step
@@ -212,6 +210,231 @@ impl Default for Font
                 lines: Builder::begin(Point2{x: 0.4, y: 0.0}, Point2{x: 0.4, y: 0.0})
                     .build(),
                 width: 0.1,
+                step: default_step
+            }),
+            ('A', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 0.0}, Point2{x: 0.5, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .teleport(Point2{x: 0.15, y: 0.3}, Point2{x: 0.85, y: 0.3})
+                    .build(),
+                width: 0.8,
+                step: default_step
+            }),
+            ('B', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 0.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.8, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.8})
+                    .move_to(Point2{x: 0.8, y: 0.5})
+                    .move_to(Point2{x: 0.0, y: 0.5})
+                    .move_from(4, Point2{x: 1.0, y: 0.2})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to_index(0)
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('C', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.5,
+                step: default_step
+            }),
+            ('D', FontChar{
+                lines: Builder::begin(Point2{x: 0.7, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 0.7, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.5})
+                    .move_to_index(0)
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('E', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .teleport(Point2{x: 0.0, y: 0.5}, Point2{x: 1.0, y: 0.5})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('F', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .teleport(Point2{x: 0.0, y: 0.5}, Point2{x: 0.9, y: 0.5})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('G', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.5})
+                    .move_to(Point2{x: 0.5, y: 0.5})
+                    .build(),
+                width: 0.8,
+                step: default_step
+            }),
+            ('H', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.0, y: 0.0})
+                    .teleport(Point2{x: 1.0, y: 1.0}, Point2{x: 1.0, y: 0.0})
+                    .teleport(Point2{x: 0.0, y: 0.5}, Point2{x: 1.0, y: 0.5})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('I', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .teleport(Point2{x: 1.0, y: 0.0}, Point2{x: 0.0, y: 0.0})
+                    .teleport(Point2{x: 0.5, y: 0.0}, Point2{x: 0.5, y: 1.0})
+                    .build(),
+                width: 0.4,
+                step: default_step
+            }),
+            ('J', FontChar{
+                lines: Builder::begin(Point2{x: 0.3, y: 1.0}, Point2{x: 1.0, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 0.0, y: 0.2})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('K', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.0, y: 0.0})
+                    .teleport(Point2{x: 0.8, y: 1.0}, Point2{x: 0.0, y: 0.5})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('L', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('M', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 0.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.5, y: 0.4})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('N', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 0.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('O', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 1.0, y: 1.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to_index(0)
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('P', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 0.5}, Point2{x: 1.0, y: 0.5})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('Q', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.9, y: 1.0})
+                    .move_to(Point2{x: 0.9, y: 0.05})
+                    .move_to(Point2{x: 0.0, y: 0.05})
+                    .move_to_index(0)
+                    .teleport(Point2{x: 0.5, y: 0.2}, Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('R', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 0.0}, Point2{x: 0.0, y: 0.5})
+                    .move_to(Point2{x: 0.9, y: 0.5})
+                    .move_to(Point2{x: 0.9, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('S', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.6})
+                    .move_to(Point2{x: 1.0, y: 0.4})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .build(),
+                width: 0.5,
+                step: default_step
+            }),
+            ('T', FontChar{
+                lines: Builder::begin(Point2{x: 1.0, y: 1.0}, Point2{x: 0.0, y: 1.0})
+                    .teleport(Point2{x: 0.5, y: 1.0}, Point2{x: 0.5, y: 0.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('U', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.6,
+                step: default_step
+            }),
+            ('V', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.5, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.5,
+                step: default_step
+            }),
+            ('W', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.2, y: 0.0})
+                    .move_to(Point2{x: 0.5, y: 0.6})
+                    .move_to(Point2{x: 0.8, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.9,
+                step: default_step
+            }),
+            ('X', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 1.0, y: 0.0})
+                    .teleport(Point2{x: 0.0, y: 0.0}, Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('Y', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 0.5, y: 0.6})
+                    .move_to(Point2{x: 0.5, y: 0.0})
+                    .move_from(0, Point2{x: 1.0, y: 1.0})
+                    .build(),
+                width: 0.7,
+                step: default_step
+            }),
+            ('Z', FontChar{
+                lines: Builder::begin(Point2{x: 0.0, y: 1.0}, Point2{x: 1.0, y: 1.0})
+                    .move_to(Point2{x: 0.0, y: 0.0})
+                    .move_to(Point2{x: 1.0, y: 0.0})
+                    .build(),
+                width: 0.7,
                 step: default_step
             })
         ].into_iter().collect();

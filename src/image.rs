@@ -264,12 +264,14 @@ struct CharInfo<'a>
 pub enum TextHAlign
 {
     Left,
+    Middle,
     Right
 }
 
 pub enum TextVAlign
 {
     Bottom,
+    Middle,
     Top
 }
 
@@ -329,6 +331,21 @@ impl PPMImage
         Self{data: vec![c; width * height], width, height, width_bigger, aspect}
     }
 
+    pub fn blit(&mut self, other: Self, position: Point2<usize>)
+    {
+        for ty in 0..other.height
+        {
+            for tx in 0..other.width
+            {
+                let local = Point2{x: tx, y: ty};
+                self.get_mut(position + local).map(|p|
+                {
+                    *p = other[local]
+                });
+            }
+        }
+    }
+
     pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()>
     {
         if self.width == 0 || self.height == 0
@@ -384,6 +401,13 @@ impl PPMImage
         let pos = match align_h
         {
             TextHAlign::Left => bb.bottom_left,
+            TextHAlign::Middle =>
+            {
+                Point2{
+                    x: (bb.bottom_left.x + bb.top_right.x - real_size.x) * 0.5,
+                    y: bb.bottom_left.y
+                }
+            },
             TextHAlign::Right =>
             {
                 Point2{
@@ -396,6 +420,13 @@ impl PPMImage
         let pos = match align_v
         {
             TextVAlign::Bottom => pos,
+            TextVAlign::Middle =>
+            {
+                Point2{
+                    x: bb.bottom_left.x,
+                    y: (bb.bottom_left.y + bb.top_right.y - real_size.y) * 0.5
+                }
+            },
             TextVAlign::Top =>
             {
                 Point2{
@@ -436,7 +467,7 @@ impl PPMImage
         self.text_char_positions(font, position, size, text)
             .for_each(|CharInfo{size, position, thickness, c}|
             {
-                c.lines().iter().for_each(|line|
+                c.lines().iter().map(|line|
                 {
                     let to_local = |mut p: Point2<f64>|
                     {
@@ -445,13 +476,19 @@ impl PPMImage
                         position + p * size
                     };
 
-                    self.line_thick(
+                    self.line_thick_pixels(
                         to_local(line.start),
                         to_local(line.end),
-                        thickness,
-                        color
-                    );
-                });
+                        thickness
+                    )
+                }).reduce(|acc, x|
+                {
+                    acc.union(&x).copied().collect::<HashSet<_>>()
+                }).expect("must have at least a single line")
+                    .into_iter().for_each(|pixel|
+                    {
+                        self[pixel] = color.set(self[pixel]);
+                    });
 
                 bb.top_right = Point2{
                     x: position.x + (c.width() * size.x),
@@ -587,6 +624,21 @@ impl PPMImage
         c: impl ColorRepr
     )
     {
+        self.line_thick_pixels(p0, p1, thickness).into_iter().for_each(|pixel|
+        {
+            self[pixel] = c.set(self[pixel]);
+        });
+    }
+
+    pub fn line_thick_pixels(
+        &self,
+        p0: Point2<f64>,
+        p1: Point2<f64>,
+        thickness: f64
+    ) -> HashSet<Point2<usize>>
+    {
+        let mut pixels = HashSet::new();
+
         let diff = p1 - p0;
         let angle = -diff.y.atan2(diff.x);
 
@@ -630,13 +682,15 @@ impl PPMImage
                 )
             };
 
-            self.triangle(p0 - up, p0 + middle_n, p0 + end_n, c);
-            self.triangle(p1 - up, p1 + middle, p1 + end, c);
+            pixels.extend(self.triangle_pixels(p0 - up, p0 + middle_n, p0 + end_n));
+            pixels.extend(self.triangle_pixels(p1 - up, p1 + middle, p1 + end));
         }
 
         // the line
-        self.triangle(p0 + up, p1 + up, p0 - up, c);
-        self.triangle(p0 - up, p1 + up, p1 - up, c);
+        pixels.extend(self.triangle_pixels(p0 + up, p1 + up, p0 - up));
+        pixels.extend(self.triangle_pixels(p0 - up, p1 + up, p1 - up));
+
+        pixels
     }
 
     pub fn fill(&mut self, bb: BoundingBox, c: impl ColorRepr)
@@ -658,7 +712,6 @@ impl PPMImage
     {
         let lod = 9;
 
-        let pos_local = self.to_local(pos);
         let pixels = (1..=lod).flat_map(|i|
         {
             let point_at = |i|
@@ -666,15 +719,13 @@ impl PPMImage
                 let i = i as f64 / lod as f64 * (2.0 * f64::consts::PI);
 
                 let size = self.without_aspect(Point2::repeat(size));
-                let point = Point2{x: i.sin(), y: i.cos()} * size + pos;
-
-                self.to_local(point)
+                Point2{x: i.sin(), y: i.cos()} * size + pos
             };
 
             let prev = point_at(i - 1);
             let curr = point_at(i);
 
-            Self::triangle_pixels(prev, pos_local, curr)
+            self.triangle_pixels(prev, pos, curr)
         }).collect::<HashSet<Point2<usize>>>();
 
         pixels.into_iter().for_each(|pixel|
@@ -702,13 +753,23 @@ impl PPMImage
         c: impl ColorRepr
     )
     {
-        Self::triangle_pixels(p0, p1, p2).into_iter().for_each(|point|
+        Self::triangle_local_pixels(p0, p1, p2).into_iter().for_each(|point|
         {
             self[point] = c.set(self[point]);
         });
     }
 
     pub fn triangle_pixels(
+        &self,
+        p0: Point2<f64>,
+        p1: Point2<f64>,
+        p2: Point2<f64>
+    ) -> Vec<Point2<usize>>
+    {
+        Self::triangle_local_pixels(self.to_local(p0), self.to_local(p1), self.to_local(p2))
+    }
+
+    pub fn triangle_local_pixels(
         p0: Point2<usize>,
         p1: Point2<usize>,
         p2: Point2<usize>
@@ -915,12 +976,25 @@ impl PPMImage
         }
     }
 
+    fn index_maybe(&self, pos: Point2<usize>) -> Option<usize>
+    {
+        ((pos.y < self.height) && (pos.x < self.width)).then(||
+        {
+            pos.x + pos.y * self.width
+        })
+    }
+
     fn index(&self, pos: Point2<usize>) -> usize
     {
-        assert!(pos.y < self.height);
-        assert!(pos.x < self.width);
+        self.index_maybe(pos).expect("index out of range")
+    }
 
-        pos.x + pos.y * self.width
+    fn get_mut(&mut self, pos: Point2<usize>) -> Option<&mut Color>
+    {
+        self.index_maybe(pos).map(|index|
+        {
+            &mut self.data[index]
+        })
     }
 }
 

@@ -273,7 +273,6 @@ impl Grapher
     {
         if let Some(last) = graph.last()
         {
-            eprintln!("right: {}", last.x);
             self.right = self.right.max(last.x);
         }
 
@@ -297,8 +296,6 @@ impl Grapher
 
             lowest = lowest.min(point.y);
         });
-
-        eprintln!("bottom: {lowest}");
 
         if let Some(min_height) = self.config.min_height
         {
@@ -346,6 +343,11 @@ impl Grapher
     }
 
     pub fn save(&self, size: Point2<usize>, path: impl AsRef<Path>) -> io::Result<()>
+    {
+        self.to_image(size).save(path)
+    }
+
+    pub fn to_image(&self, size: Point2<usize>) -> PPMImage
     {
         let width = size.x;
         let height = size.y;
@@ -421,7 +423,7 @@ impl Grapher
 
         self.draw_units(&mut image, pad, aspect, guide_size, Color::black());
 
-        image.save(path)
+        image
     }
 
     fn draw_units(
