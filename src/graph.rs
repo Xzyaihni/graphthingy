@@ -337,6 +337,28 @@ impl Grapher
         Point2{x, y}
     }
 
+    // creative names
+    fn unposition(&self, point: Point2<f64>) -> Point2<f64>
+    {
+        let Point2{x, y} = point;
+
+        let y = if let Some(scale) = self.config.log_scale
+        {
+            y.powf(scale.recip())
+        } else
+        {
+            y
+        };
+
+        let x = x * (self.right - self.left);
+        let y = y * (self.top - self.bottom);
+
+        let x = x + self.left;
+        let y = y + self.bottom;
+
+        Point2{x, y}
+    }
+
     fn fit(point: &Point2<f64>, pad: Padding) -> Point2<f64>
     {
         point * pad.area() + pad.bottom_left
@@ -442,8 +464,11 @@ impl Grapher
         c: Color
     )
     {
+        let middle_value = self.unposition(Point2{x: 0.0, y: 0.5}).y;
+
         // bottom text ecks dee
         let bottom_text = format!("{:.4}", self.bottom);
+        let middle_text = format!("{middle_value:.4}");
         let top_text = format!("{:.4}", self.top);
 
         let mut bottom_left = Point2{
@@ -455,13 +480,15 @@ impl Grapher
 
         let max_height = 0.05;
 
+        let right_edge = pad.bottom_left.x - bottom_left.x - guide_size;
+
         image.text_between(
             &self.config.font,
             c,
             BoundingBox{
                 bottom_left,
                 top_right: Point2{
-                    x: pad.bottom_left.x - bottom_left.x - guide_size,
+                    x: right_edge,
                     y: max_height
                 }
             },
@@ -481,13 +508,34 @@ impl Grapher
             BoundingBox{
                 bottom_left,
                 top_right: Point2{
-                    x: pad.bottom_left.x - bottom_left.x - guide_size,
+                    x: right_edge,
                     y: pad.top_right.y
                 }
             },
             TextHAlign::Right,
             TextVAlign::Top,
             &top_text
+        );
+
+        let half_max = max_height * 0.5;
+        let y = pad.bottom_left.y + (pad.top_right.y - pad.bottom_left.y) * 0.5;
+
+        image.text_between(
+            &self.config.font,
+            c,
+            BoundingBox{
+                bottom_left: Point2{
+                    x: bottom_left.x,
+                    y: y - half_max
+                },
+                top_right: Point2{
+                    x: right_edge,
+                    y: y + half_max
+                }
+            },
+            TextHAlign::Right,
+            TextVAlign::Middle,
+            &middle_text
         );
     }
 
