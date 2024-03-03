@@ -436,6 +436,11 @@ impl Default for Font
                     .build(),
                 width: 0.7,
                 step: default_step
+            }),
+            (' ', FontChar{
+                lines: Vec::new(),
+                width: 0.5,
+                step: default_step
             })
         ].into_iter().collect();
 

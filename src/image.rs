@@ -494,11 +494,13 @@ impl PPMImage
                 }).reduce(|acc, x|
                 {
                     acc.union(&x).copied().collect::<HashSet<_>>()
-                }).expect("must have at least a single line")
-                    .into_iter().for_each(|pixel|
+                }).map(|pixels|
+                {
+                    pixels.into_iter().for_each(|pixel|
                     {
                         self[pixel] = color.set(self[pixel]);
                     });
+                });
 
                 bb.top_right = Point2{
                     x: position.x + (c.width() * size.x),
