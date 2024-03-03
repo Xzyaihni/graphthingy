@@ -464,11 +464,8 @@ impl Grapher
         c: Color
     )
     {
-        let middle_value = self.unposition(Point2{x: 0.0, y: 0.5}).y;
-
         // bottom text ecks dee
         let bottom_text = format!("{:.4}", self.bottom);
-        let middle_text = format!("{middle_value:.4}");
         let top_text = format!("{:.4}", self.top);
 
         let mut bottom_left = Point2{
@@ -517,26 +514,36 @@ impl Grapher
             &top_text
         );
 
-        let half_max = max_height * 0.5;
-        let y = pad.bottom_left.y + (pad.top_right.y - pad.bottom_left.y) * 0.5;
+        let mut unit_at = |value|
+        {
+            let this_value = self.unposition(Point2{x: 0.0, y: value}).y;
+            let this_text = format!("{this_value:.4}");
 
-        image.text_between(
-            &self.config.font,
-            c,
-            BoundingBox{
-                bottom_left: Point2{
-                    x: bottom_left.x,
-                    y: y - half_max
+            let half_max = max_height * 0.5;
+            let y = pad.bottom_left.y + (pad.top_right.y - pad.bottom_left.y) * value;
+
+            image.text_between(
+                &self.config.font,
+                c,
+                BoundingBox{
+                    bottom_left: Point2{
+                        x: bottom_left.x,
+                        y: y - half_max
+                    },
+                    top_right: Point2{
+                        x: right_edge,
+                        y: y + half_max
+                    }
                 },
-                top_right: Point2{
-                    x: right_edge,
-                    y: y + half_max
-                }
-            },
-            TextHAlign::Right,
-            TextVAlign::Middle,
-            &middle_text
-        );
+                TextHAlign::Right,
+                TextVAlign::Middle,
+                &this_text
+            );
+        };
+
+        unit_at(0.25);
+        unit_at(0.5);
+        unit_at(0.75);
     }
 
     fn draw_graph(

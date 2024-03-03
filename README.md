@@ -1,5 +1,5 @@
 # graphthingy
-this sucks cuz it doesnt even show the units
+this sucks BUT it does show the units (i added them)
 
 ```
 git clone https://github.com/Xzyaihni/graphthingy
