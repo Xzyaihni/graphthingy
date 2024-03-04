@@ -166,6 +166,7 @@ impl Graph
         &self.0.points.0
     }
 
+    #[allow(dead_code)]
     pub fn best_fit_line(&self) -> Line
     {
         self.0.points.best_fit_line()
@@ -445,6 +446,7 @@ impl<'a> GrapherDrawer<'a>
         Self{grapher, image, pad}
     }
 
+    #[allow(dead_code)]
     pub fn image_mut(&mut self) -> &mut PPMImage
     {
         &mut self.image
