@@ -16,6 +16,7 @@ pub struct Config
     pub min_height: Option<f64>,
     pub max_height: Option<f64>,
     pub running_avg: Option<u32>,
+    pub plot_line: bool,
     pub paths: Vec<String>
 }
 
@@ -28,6 +29,7 @@ impl Config
         let mut min_height = None;
         let mut max_height = None;
         let mut running_avg = None;
+        let mut plot_line = false;
         let mut paths = Vec::new();
 
         while let Some(arg) = args.next()
@@ -54,6 +56,10 @@ impl Config
                 {
                     running_avg = Some(Self::parse_number(&mut args, arg)?);
                 },
+                "-L" | "--line" =>
+                {
+                    plot_line = true;
+                },
                 _ =>
                 {
                     paths.push(arg);
@@ -75,6 +81,7 @@ impl Config
             min_height,
             max_height,
             running_avg,
+            plot_line,
             paths
         })
     }

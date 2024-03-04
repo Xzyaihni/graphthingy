@@ -62,6 +62,80 @@ impl RunningAverage
     }
 }
 
+pub struct Line
+{
+    pub slope: f64,
+    pub intercept: f64
+}
+
+impl Line
+{
+    pub fn at_x(&self, x: f64) -> f64
+    {
+        self.slope * x + self.intercept
+    }
+
+    pub fn at_y(&self, y: f64) -> f64
+    {
+        (y - self.intercept) / self.slope
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Points(pub Vec<PointType>);
+
+impl Points
+{
+    pub fn new() -> Self
+    {
+        Self(Vec::new())
+    }
+
+    pub fn map<F: FnMut(Point2<f64>) -> Point2<f64>>(mut self, mut map: F) -> Points
+    {
+        self.0.iter_mut().for_each(|p| *p = map(*p));
+
+        self
+    }
+
+    fn mean_values<F: FnMut(&Point2<f64>) -> f64>(&self, map: F) -> f64
+    {
+        self.0.iter().map(map).sum::<f64>() / self.0.len() as f64
+    }
+
+    pub fn mean_x(&self) -> f64
+    {
+        self.mean_values(|p| p.x)
+    }
+
+    pub fn mean_y(&self) -> f64
+    {
+        self.mean_values(|p| p.y)
+    }
+
+    // does it with least squares difference
+    pub fn best_fit_line(&self) -> Line
+    {
+        let mean_x = self.mean_x();
+        let mean_y = self.mean_y();
+
+        let top: f64 = self.0.iter().map(|p|
+        {
+            (p.x - mean_x) * (p.y - mean_y)
+        }).sum();
+
+        let bottom: f64 = self.0.iter().map(|p|
+        {
+            (p.x - mean_x).powi(2)
+        }).sum();
+
+        let slope = top / bottom;
+        let intercept = mean_y - slope * mean_x;
+
+        Line{slope, intercept}
+    }
+}
+
 pub struct Graph(GraphBuilder);
 
 impl Graph
@@ -79,12 +153,22 @@ impl Graph
 
     pub fn last(&self) -> Option<PointType>
     {
-        self.0.points.last().copied()
+        self.0.points.0.last().copied()
     }
 
-    pub fn points(&self) -> &[PointType]
+    pub fn points(&self) -> &Points
     {
         &self.0.points
+    }
+
+    pub fn points_slice(&self) -> &[PointType]
+    {
+        &self.0.points.0
+    }
+
+    pub fn best_fit_line(&self) -> Line
+    {
+        self.0.points.best_fit_line()
     }
 
     pub fn averages(&self) -> Option<&[f64]>
@@ -95,13 +179,13 @@ impl Graph
     #[allow(dead_code)]
     pub fn first(&self) -> Option<PointType>
     {
-        self.0.points.first().copied()
+        self.0.points.0.first().copied()
     }
 }
 
 pub struct GraphBuilder
 {
-    points: Vec<PointType>,
+    points: Points,
     running_avg: Option<RunningAverage>,
     lowest_point: Option<f64>,
     highest_point: Option<f64>
@@ -112,7 +196,7 @@ impl GraphBuilder
     pub fn new(running_avg: Option<u32>) -> Self
     {
         Self{
-            points: Vec::new(),
+            points: Points::new(),
             running_avg: running_avg.map(|amount| RunningAverage::new(amount)),
             lowest_point: None,
             highest_point: None
@@ -121,7 +205,7 @@ impl GraphBuilder
 
     pub fn push(&mut self, p: PointType)
     {
-        self.points.push(p);
+        self.points.0.push(p);
 
         let Point2{x: _x, y} = p;
 
@@ -150,14 +234,14 @@ impl GraphBuilder
 
     pub fn complete(mut self) -> Graph
     {
-        self.points.sort_unstable_by(|a, b|
+        self.points.0.sort_unstable_by(|a, b|
         {
             a.x.partial_cmp(&b.x).expect("values must be comparable")
         });
 
         if let Some(running_avg) = self.running_avg.as_mut()
         {
-            (0..self.points.len()).for_each(|x| running_avg.push(&self.points[0..x]));
+            (0..self.points.0.len()).for_each(|x| running_avg.push(&self.points.0[0..x]));
         }
 
         Graph(self)
@@ -171,6 +255,7 @@ pub struct GrapherConfig
     pub min_height: Option<f64>,
     pub max_height: Option<f64>,
     pub running_avg: Option<u32>,
+    pub plot_line: bool,
     pub font: Font
 }
 
@@ -184,6 +269,7 @@ impl Default for GrapherConfig
             min_height: None,
             max_height: None,
             running_avg: None,
+            plot_line: false,
             font: Font::default()
         }
     }
@@ -279,7 +365,7 @@ impl Grapher
         let mut lowest = f64::MAX;
 
         let mut average = 0.0;
-        graph.points().iter().for_each(|point|
+        graph.points_slice().iter().for_each(|point|
         {
             if let Some(max_height) = self.config.max_height
             {
@@ -304,7 +390,7 @@ impl Grapher
         {
             self.bottom = if let Some(scale) = self.config.min_avg
             {
-                let average = average / graph.points().len() as f64;
+                let average = average / graph.points_slice().len() as f64;
 
                 let diff = (average - lowest).abs();
 
@@ -316,17 +402,65 @@ impl Grapher
         }
     }
 
-    fn to_local(&self, point: &Point2<f64>, pad: Padding) -> Point2<f64>
+    pub fn save(&self, size: Point2<usize>, path: impl AsRef<Path>) -> io::Result<()>
     {
-        Self::fit(&self.position(&point), pad)
+        self.to_image(size).save(path)
     }
 
-    fn position(&self, point: &Point2<f64>) -> Point2<f64>
+    pub fn to_image(&self, size: Point2<usize>) -> PPMImage
     {
-        let x = (point.x - self.left) / (self.right - self.left);
-        let y = (point.y - self.bottom) / (self.top - self.bottom);
+        let image = PPMImage::new(size.x, size.y, Color::white());
 
-        let y = if let Some(scale) = self.config.log_scale
+        self.to_drawer_with(image).to_image()
+    }
+
+    pub fn to_drawer_with(&self, image: PPMImage) -> GrapherDrawer
+    {
+        let width = image.width();
+        let height = image.height();
+
+        let aspect = width as f64 / height as f64;
+        let pad = 0.025;
+
+        let pad = Padding{
+            bottom_left: Point2{x: 0.2 / aspect, y: pad},
+            top_right: Point2{x: 1.0 - pad / aspect, y: 1.0 - pad}
+        };
+
+        GrapherDrawer::new(self, image, pad)
+    }
+}
+
+pub struct GrapherDrawer<'a>
+{
+    grapher: &'a Grapher,
+    image: PPMImage,
+    pad: Padding
+}
+
+impl<'a> GrapherDrawer<'a>
+{
+    pub fn new(grapher: &'a Grapher, image: PPMImage, pad: Padding) -> Self
+    {
+        Self{grapher, image, pad}
+    }
+
+    pub fn image_mut(&mut self) -> &mut PPMImage
+    {
+        &mut self.image
+    }
+
+    pub fn to_local(&self, point: Point2<f64>) -> Point2<f64>
+    {
+        self.fit(self.position(point))
+    }
+
+    pub fn position(&self, point: Point2<f64>) -> Point2<f64>
+    {
+        let x = (point.x - self.grapher.left) / (self.grapher.right - self.grapher.left);
+        let y = (point.y - self.grapher.bottom) / (self.grapher.top - self.grapher.bottom);
+
+        let y = if let Some(scale) = self.grapher.config.log_scale
         {
             y.powf(scale)
         } else
@@ -338,11 +472,11 @@ impl Grapher
     }
 
     // creative names
-    fn unposition(&self, point: Point2<f64>) -> Point2<f64>
+    pub fn unposition(&self, point: Point2<f64>) -> Point2<f64>
     {
         let Point2{x, y} = point;
 
-        let y = if let Some(scale) = self.config.log_scale
+        let y = if let Some(scale) = self.grapher.config.log_scale
         {
             y.powf(scale.recip())
         } else
@@ -350,46 +484,23 @@ impl Grapher
             y
         };
 
-        let x = x * (self.right - self.left);
-        let y = y * (self.top - self.bottom);
+        let x = x * (self.grapher.right - self.grapher.left);
+        let y = y * (self.grapher.top - self.grapher.bottom);
 
-        let x = x + self.left;
-        let y = y + self.bottom;
+        let x = x + self.grapher.left;
+        let y = y + self.grapher.bottom;
 
         Point2{x, y}
     }
 
-    fn fit(point: &Point2<f64>, pad: Padding) -> Point2<f64>
+    pub fn fit(&self, point: Point2<f64>) -> Point2<f64>
     {
-        point * pad.area() + pad.bottom_left
+        point * self.pad.area() + self.pad.bottom_left
     }
 
-    pub fn save(&self, size: Point2<usize>, path: impl AsRef<Path>) -> io::Result<()>
+    pub fn to_image(mut self) -> PPMImage
     {
-        self.to_image(size).save(path)
-    }
-
-    pub fn to_image(&self, size: Point2<usize>) -> PPMImage
-    {
-        let image = PPMImage::new(size.x, size.y, Color::white());
-
-        self.to_image_with(image)
-    }
-
-    pub fn to_image_with(&self, mut image: PPMImage) -> PPMImage
-    {
-        let width = image.width();
-        let height = image.height();
-
         let thickness = 0.005;
-
-        let aspect = width as f64 / height as f64;
-        let pad = 0.025;
-
-        let pad = Padding{
-            bottom_left: Point2{x: 0.2 / aspect, y: pad},
-            top_right: Point2{x: 1.0 - pad / aspect, y: 1.0 - pad}
-        };
 
         let guide_size = 0.01;
         let border_color = Color::black();
@@ -400,25 +511,30 @@ impl Grapher
                 ..Color::black().into()
             };
 
-            Self::draw_guides(&mut image, pad, thickness * 0.75, guide_size, border_color, c);
+            self.draw_guides(thickness * 0.75, guide_size, border_color, c);
         }
         
         let c = Color{r: 210, g: 210, b: 210};
-        for graph in &self.graphs
+        for graph in &self.grapher.graphs
         {
             if let Some(lowest) = graph.lowest()
             {
                 let left = Point2{x: 0.0, y: lowest};
                 let right = Point2{x: 0.0, y: lowest};
 
-                let left = Point2{x: 0.0, y: self.position(&left).y};
-                let right = Point2{x: 1.0, y: self.position(&right).y};
+                let left = Point2{x: 0.0, y: self.position(left).y};
+                let right = Point2{x: 1.0, y: self.position(right).y};
 
-                image.line_thick(Self::fit(&left, pad), Self::fit(&right, pad), thickness, c);
+                self.image.line_thick(
+                    self.fit(left),
+                    self.fit(right),
+                    thickness,
+                    c
+                );
             }
         }
         
-        Self::draw_borders(&mut image, pad, thickness, border_color);
+        self.draw_borders(thickness, border_color);
 
         let mut colors = vec![
             Color{r: 255, g: 120, b: 120},
@@ -429,7 +545,7 @@ impl Grapher
         ].into_iter();
 
         let mut seed = 54321;
-        for graph in &self.graphs
+        for graph in &self.grapher.graphs
         {
             let color = colors.next().unwrap_or_else(||
             {
@@ -447,40 +563,44 @@ impl Grapher
                 Color{r: r(0), g: r(1), b: r(2)}
             });
 
-            self.draw_graph(&mut image, graph, pad, thickness, color);
+            if self.grapher.config.plot_line
+            {
+                self.draw_best_fit_line(graph, thickness, ColorAlpha{a: 100, ..color.into()});
+            }
+
+            self.draw_graph(graph, thickness, color);
         }
 
-        self.draw_units(&mut image, pad, aspect, guide_size, Color::black());
+        self.draw_units(guide_size, Color::black());
 
-        image
+        self.image
     }
 
     fn draw_units(
-        &self,
-        image: &mut PPMImage,
-        pad: Padding,
-        aspect: f64,
+        &mut self,
         guide_size: f64,
         c: Color
     )
     {
         // bottom text ecks dee
-        let bottom_text = format!("{:.4}", self.bottom);
-        let top_text = format!("{:.4}", self.top);
+        let bottom_text = format!("{:.4}", self.grapher.bottom);
+        let top_text = format!("{:.4}", self.grapher.top);
 
         let mut bottom_left = Point2{
             x: 0.02,
-            y: pad.bottom_left.y
+            y: self.pad.bottom_left.y
         };
+
+        let aspect = self.image.aspect();
 
         bottom_left.x /= aspect;
 
         let max_height = 0.05;
 
-        let right_edge = pad.bottom_left.x - bottom_left.x - guide_size;
+        let right_edge = self.pad.bottom_left.x - bottom_left.x - guide_size;
 
-        image.text_between(
-            &self.config.font,
+        self.image.text_between(
+            &self.grapher.config.font,
             c,
             BoundingBox{
                 bottom_left,
@@ -495,18 +615,18 @@ impl Grapher
         );
 
         let bottom_left = Point2{
-            y: pad.top_right.y - max_height,
+            y: self.pad.top_right.y - max_height,
             ..bottom_left
         };
 
-        image.text_between(
-            &self.config.font,
+        self.image.text_between(
+            &self.grapher.config.font,
             c,
             BoundingBox{
                 bottom_left,
                 top_right: Point2{
                     x: right_edge,
-                    y: pad.top_right.y
+                    y: self.pad.top_right.y
                 }
             },
             TextHAlign::Right,
@@ -520,10 +640,11 @@ impl Grapher
             let this_text = format!("{this_value:.4}");
 
             let half_max = max_height * 0.5;
-            let y = pad.bottom_left.y + (pad.top_right.y - pad.bottom_left.y) * value;
+            let y = self.pad.bottom_left.y
+                + (self.pad.top_right.y - self.pad.bottom_left.y) * value;
 
-            image.text_between(
-                &self.config.font,
+            self.image.text_between(
+                &self.grapher.config.font,
                 c,
                 BoundingBox{
                     bottom_left: Point2{
@@ -547,27 +668,34 @@ impl Grapher
     }
 
     fn draw_graph(
-        &self,
-        image: &mut PPMImage,
+        &mut self,
         graph: &Graph,
-        pad: Padding,
         thickness: f64,
         c: Color
     )
     {
-        let points = graph.points();
+        let points = graph.points_slice();
         let pairs = points.iter().zip(points.iter().skip(1));
 
         for (input, output) in pairs
         {
-            image.line_thick(self.to_local(input, pad), self.to_local(output, pad), thickness, c);
+            self.image.line_thick(
+                self.to_local(*input),
+                self.to_local(*output),
+                thickness,
+                c
+            );
         }
 
         for point in points
         {
             let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 90}.set(c);
 
-            image.circle(self.to_local(point, pad), thickness * 1.5, point_color);
+            self.image.circle(
+                self.to_local(*point),
+                thickness * 1.5,
+                point_color
+            );
         }
 
         let averages = graph.averages();
@@ -590,9 +718,9 @@ impl Grapher
 
             for (input, output) in average_pairs
             {
-                image.line_thick(
-                    self.to_local(&input, pad),
-                    self.to_local(&output, pad),
+                self.image.line_thick(
+                    self.to_local(input),
+                    self.to_local(output),
                     thickness,
                     avg_c
                 );
@@ -601,8 +729,7 @@ impl Grapher
     }
 
     fn draw_guides(
-        image: &mut PPMImage,
-        pad: Padding,
+        &mut self,
         original_thickness: f64,
         guide_size: f64,
         border_color: Color,
@@ -616,13 +743,13 @@ impl Grapher
 
         let cap_at = |image: &mut PPMImage, y: f64, thickness: f64|
         {
-            let y = lerp(pad.bottom_left.y, pad.top_right.y, y);
+            let y = lerp(self.pad.bottom_left.y, self.pad.top_right.y, y);
 
             let thickness_ratio = thickness / original_thickness;
             let guide_width = guide_size * thickness_ratio.sqrt();
             image.line_thick(
-                Point2{x: pad.bottom_left.x - guide_width, y},
-                Point2{x: pad.bottom_left.x + guide_width, y},
+                Point2{x: self.pad.bottom_left.x - guide_width, y},
+                Point2{x: self.pad.bottom_left.x + guide_width, y},
                 thickness,
                 border_color
             );
@@ -631,11 +758,11 @@ impl Grapher
         let line_at = |image: &mut PPMImage, y: f64, thickness: f64|
         {
             {
-                let y = lerp(pad.bottom_left.y, pad.top_right.y, y);
+                let y = lerp(self.pad.bottom_left.y, self.pad.top_right.y, y);
 
                 image.line_thick(
-                    Point2{x: pad.bottom_left.x, y},
-                    Point2{x: pad.top_right.x, y},
+                    Point2{x: self.pad.bottom_left.x, y},
+                    Point2{x: self.pad.top_right.x, y},
                     thickness,
                     c
                 );
@@ -646,33 +773,64 @@ impl Grapher
 
         let half_thickness = original_thickness * 0.55;
 
-        line_at(image, 0.5, original_thickness);
-        line_at(image, 1.0, original_thickness);
+        line_at(&mut self.image, 0.5, original_thickness);
+        line_at(&mut self.image, 1.0, original_thickness);
 
         let divisions = 10;
         let step = 0.5 / divisions as f64;
         for i in 1..divisions
         {
-            line_at(image, i as f64 * step, half_thickness);
-            line_at(image, 0.5 + i as f64 * step, half_thickness);
+            line_at(&mut self.image, i as f64 * step, half_thickness);
+            line_at(&mut self.image, 0.5 + i as f64 * step, half_thickness);
         }
 
-        cap_at(image, 0.0, original_thickness);
-        cap_at(image, 1.0, original_thickness);
+        cap_at(&mut self.image, 0.0, original_thickness);
+        cap_at(&mut self.image, 1.0, original_thickness);
     }
 
-    fn draw_borders(image: &mut PPMImage, pad: Padding, thickness: f64, c: Color)
+    fn draw_best_fit_line(&mut self, graph: &Graph, thickness: f64, c: ColorAlpha)
     {
-        image.line_thick(
-            pad.bottom_left,
-            Point2{x: pad.bottom_left.x, y: pad.top_right.y},
+        let line = graph.points().clone().map(|x| self.position(x)).best_fit_line();
+
+        let point_at = |x|
+        {
+            let x = x;
+            let y = line.at_x(x);
+
+            if !(0.0..=1.0).contains(&y)
+            {
+                let y = y.clamp(0.0, 1.0);
+
+                Point2{x: line.at_y(y), y}
+            } else
+            {
+                Point2{x, y}
+            }
+        };
+
+        let start = point_at(0.0);
+        let end = point_at(1.0);
+
+        self.image.line_thick(
+            self.fit(start),
+            self.fit(end),
+            thickness,
+            c
+        );
+    }
+
+    fn draw_borders(&mut self, thickness: f64, c: Color)
+    {
+        self.image.line_thick(
+            self.pad.bottom_left,
+            Point2{x: self.pad.bottom_left.x, y: self.pad.top_right.y},
             thickness,
             c
         );
 
-        image.line_thick(
-            pad.bottom_left,
-            Point2{x: pad.top_right.x, y: pad.bottom_left.y},
+        self.image.line_thick(
+            self.pad.bottom_left,
+            Point2{x: self.pad.top_right.x, y: self.pad.bottom_left.y},
             thickness,
             c
         );

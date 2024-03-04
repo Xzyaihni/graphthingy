@@ -35,6 +35,7 @@ fn main()
         min_height: config.min_height,
         max_height: config.max_height,
         running_avg: config.running_avg,
+        plot_line: config.plot_line,
         ..Default::default()
     };
 

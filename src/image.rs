@@ -341,6 +341,11 @@ impl PPMImage
         self.height
     }
 
+    pub fn aspect(&self) -> f64
+    {
+        self.width as f64 / self.height as f64
+    }
+
     pub fn blit(&mut self, other: Self, position: Point2<usize>)
     {
         for ty in 0..other.height
