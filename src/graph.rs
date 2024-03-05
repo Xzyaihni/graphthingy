@@ -1,4 +1,5 @@
 use std::{
+    f64,
     error::Error,
     io::{self, BufReader, BufRead},
     fs::File,
@@ -81,9 +82,17 @@ impl Line
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PearsonCorrCoeff
+{
+    pub r: f64,
+    pub p: f64
+}
+
 #[derive(Debug, Clone)]
 pub struct Points(pub Vec<PointType>);
 
+#[allow(dead_code)]
 impl Points
 {
     pub fn new() -> Self
@@ -98,19 +107,177 @@ impl Points
         self
     }
 
-    fn mean_values<F: FnMut(&Point2<f64>) -> f64>(&self, map: F) -> f64
+    fn mean_of(values: impl Iterator<Item=f64>, len: usize) -> f64
     {
-        self.0.iter().map(map).sum::<f64>() / self.0.len() as f64
+        values.sum::<f64>() / len as f64
+    }
+
+    fn mean(values: impl ExactSizeIterator<Item=f64>) -> f64
+    {
+        let len = values.len();
+
+        Self::mean_of(values, len)
+    }
+
+    fn sample_standard_deviation(values: impl ExactSizeIterator<Item=f64> + Clone) -> f64
+    {
+        let mean = Self::mean(values.clone());
+
+        let len = values.len();
+        let variance = Self::mean_of(values.map(|x| (x - mean).powi(2)), len - 1);
+
+        variance.sqrt()
+    }
+
+    fn standard_scores(
+        values: impl ExactSizeIterator<Item=f64> + Clone
+    ) -> impl ExactSizeIterator<Item=f64> + Clone
+    {
+        let mean = Self::mean(values.clone());
+        let standard_deviation = Self::sample_standard_deviation(values.clone());
+
+        values.map(move |x| (x - mean) / standard_deviation)
     }
 
     pub fn mean_x(&self) -> f64
     {
-        self.mean_values(|p| p.x)
+        Self::mean(self.0.iter().map(|p| p.x))
     }
 
     pub fn mean_y(&self) -> f64
     {
-        self.mean_values(|p| p.y)
+        Self::mean(self.0.iter().map(|p| p.y))
+    }
+
+    pub fn pearson_corr_coeff(&self) -> PearsonCorrCoeff
+    {
+        let len = self.0.len();
+
+        let standard_scores_x = Self::standard_scores(self.0.iter().map(|p| p.x));
+        let standard_scores_y = Self::standard_scores(self.0.iter().map(|p| p.y));
+
+        let r = Self::mean_of(
+            standard_scores_x.zip(standard_scores_y).map(|(x, y)| x * y),
+            len - 1
+        );
+
+        let df = (len - 2) as f64;
+
+        let t = (r / (1.0 - r.powi(2)).sqrt()) * df.sqrt();
+
+        let p = Self::students_t(df, t);
+
+        PearsonCorrCoeff{r, p}
+    }
+
+    // approximating the beta function was a mistake lmao
+    #[allow(dead_code)]
+    fn integrate_exclude_start<F>(start: f64, end: f64, steps: u32, f: F) -> f64
+    where
+        F: Fn(f64) -> f64
+    {
+        assert!(steps > 2);
+
+        let steps = steps * 2;
+
+        let area = end - start;
+
+        let step = (steps as f64).recip();
+
+        // uses simpson's rule
+
+        let steps = steps + 1;
+        let value_at = |n|
+        {
+            let n = n as f64 / steps as f64;
+
+            start + n * area
+        };
+
+        let s: f64 = (1..=steps).map(|n|
+        {
+            let value = f(value_at(n));
+
+            let n = n - 1;
+            let factor = if (n == 0) || (n == steps - 1)
+            {
+                1.0
+            } else if n % 2 == 1
+            {
+                4.0
+            } else
+            {
+                2.0
+            };
+
+            let result = value * factor;
+
+            result * step
+        }).sum();
+
+        s / 3.0
+    }
+
+    fn gamma_big(z: f64) -> f64
+    {
+        let terms = 1.0 + [
+            (1.0, 12.0),
+            (1.0, 288.0),
+            (-139.0, 51840.0),
+            (-571.0, 2488320.0),
+            (163879.0, 209018880.0),
+            (524819.0, 75246796800.0),
+            (-534703531.0, 902961561600.0)
+        ].into_iter().enumerate().map(|(index, (top, bottom))|
+        {
+            let p = index + 1;
+
+            top / (bottom * z.powi(p as i32))
+        }).sum::<f64>();
+
+        (2.0 * f64::consts::PI / z).sqrt() * (z / f64::consts::E).powf(z) * terms
+    }
+
+    fn gamma(z: f64) -> f64
+    {
+        // i think this is accurate enough
+        if z < 20.0
+        {
+            Self::gamma(z + 1.0) / z
+        } else
+        {
+            Self::gamma_big(z)
+        }
+    }
+
+    // not using this, its implemented with gamma anyway
+    #[allow(dead_code)]
+    fn beta(x: f64, y: f64) -> f64
+    {
+        /*Self::integrate_exclude_start(0.0, 1.0, 25000, |t|
+        {
+            let left = t.powf(x - 1.0);
+            let right = (1.0 - t).powf(y - 1.0);
+
+            left * right
+        })*/
+        
+        let top = Self::gamma(x) * Self::gamma(y);
+        let bottom = Self::gamma(x + y);
+
+        top / bottom
+    }
+
+    fn students_t(df: f64, t: f64) -> f64
+    {
+        let vh = (df + 1.0) / 2.0;
+
+        let top = Self::gamma(vh);
+        let bottom = (f64::consts::PI * df).sqrt() * Self::gamma(df / 2.0);
+
+        let right = (1.0 + (t.powi(2) / df)).powf(vh).recip();
+
+        (top / bottom) * right
     }
 
     // does it with least squares difference
