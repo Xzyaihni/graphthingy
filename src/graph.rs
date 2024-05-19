@@ -863,8 +863,7 @@ impl<'a> GrapherDrawer<'a>
 
         for point in points
         {
-            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 90}
-                .set(point.color.unwrap_or(c));
+            let point_color = point.color.unwrap_or(ColorAlpha{r: 0, g: 0, b: 0, a: 90}.set(c));
 
             self.image.circle(
                 self.to_local(point.pos),
