@@ -19,7 +19,12 @@ use crate::{
 };
 
 
-type PointType = Point2<f64>;
+#[derive(Debug, Clone, Copy)]
+pub struct PointType
+{
+    pub color: Option<Color>,
+    pub pos: Point2<f64>
+}
 
 struct RunningAverage
 {
@@ -49,7 +54,7 @@ impl RunningAverage
 
         let s: f64 = points.iter().map(|point|
         {
-            point.y
+            point.pos.y
         }).rev().take(take_amount).sum();
 
         let value = s / take_amount as f64;
@@ -100,7 +105,7 @@ impl Points
         Self(Vec::new())
     }
 
-    pub fn map<F: FnMut(Point2<f64>) -> Point2<f64>>(mut self, mut map: F) -> Points
+    pub fn map<F: FnMut(PointType) -> PointType>(mut self, mut map: F) -> Points
     {
         self.0.iter_mut().for_each(|p| *p = map(*p));
 
@@ -141,20 +146,20 @@ impl Points
 
     pub fn mean_x(&self) -> f64
     {
-        Self::mean(self.0.iter().map(|p| p.x))
+        Self::mean(self.0.iter().map(|p| p.pos.x))
     }
 
     pub fn mean_y(&self) -> f64
     {
-        Self::mean(self.0.iter().map(|p| p.y))
+        Self::mean(self.0.iter().map(|p| p.pos.y))
     }
 
     pub fn pearson_corr_coeff(&self) -> PearsonCorrCoeff
     {
         let len = self.0.len();
 
-        let standard_scores_x = Self::standard_scores(self.0.iter().map(|p| p.x));
-        let standard_scores_y = Self::standard_scores(self.0.iter().map(|p| p.y));
+        let standard_scores_x = Self::standard_scores(self.0.iter().map(|p| p.pos.x));
+        let standard_scores_y = Self::standard_scores(self.0.iter().map(|p| p.pos.y));
 
         let r = Self::mean_of(
             standard_scores_x.zip(standard_scores_y).map(|(x, y)| x * y),
@@ -288,12 +293,12 @@ impl Points
 
         let top: f64 = self.0.iter().map(|p|
         {
-            (p.x - mean_x) * (p.y - mean_y)
+            (p.pos.x - mean_x) * (p.pos.y - mean_y)
         }).sum();
 
         let bottom: f64 = self.0.iter().map(|p|
         {
-            (p.x - mean_x).powi(2)
+            (p.pos.x - mean_x).powi(2)
         }).sum();
 
         let slope = top / bottom;
@@ -375,7 +380,7 @@ impl GraphBuilder
     {
         self.points.0.push(p);
 
-        let Point2{x: _x, y} = p;
+        let Point2{x: _x, y} = p.pos;
 
         self.lowest_point = Some(self.lowest_point.map(|lowest|
         {
@@ -404,7 +409,7 @@ impl GraphBuilder
     {
         self.points.0.sort_unstable_by(|a, b|
         {
-            a.x.partial_cmp(&b.x).expect("values must be comparable")
+            a.pos.x.partial_cmp(&b.pos.x).expect("values must be comparable")
         });
 
         if let Some(running_avg) = self.running_avg.as_mut()
@@ -512,7 +517,7 @@ impl Grapher
             let value: f64 = line.trim().parse()?;
 
             x += x_step;
-            this_graph.push(Point2{x, y: value});
+            this_graph.push(PointType{color: None, pos: Point2{x, y: value}});
         }
 
         let this_graph = this_graph.complete();
@@ -527,7 +532,7 @@ impl Grapher
     {
         if let Some(last) = graph.last()
         {
-            self.right = self.right.max(last.x);
+            self.right = self.right.max(last.pos.x);
         }
 
         let mut lowest = f64::MAX;
@@ -540,15 +545,15 @@ impl Grapher
                 self.top = max_height;
             } else
             {
-                self.top = self.top.max(point.y);
+                self.top = self.top.max(point.pos.y);
             }
 
             if self.config.min_avg.is_some()
             {
-                average += point.y;
+                average += point.pos.y;
             }
 
-            lowest = lowest.min(point.y);
+            lowest = lowest.min(point.pos.y);
         });
 
         if let Some(min_height) = self.config.min_height
@@ -849,8 +854,8 @@ impl<'a> GrapherDrawer<'a>
         for (input, output) in pairs
         {
             self.image.line_thick(
-                self.to_local(*input),
-                self.to_local(*output),
+                self.to_local(input.pos),
+                self.to_local(output.pos),
                 thickness,
                 c
             );
@@ -858,10 +863,11 @@ impl<'a> GrapherDrawer<'a>
 
         for point in points
         {
-            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 90}.set(c);
+            let point_color = ColorAlpha{r: 0, g: 0, b: 0, a: 90}
+                .set(point.color.unwrap_or(c));
 
             self.image.circle(
-                self.to_local(*point),
+                self.to_local(point.pos),
                 thickness * 1.5,
                 point_color
             );
@@ -873,7 +879,7 @@ impl<'a> GrapherDrawer<'a>
             let values = values.iter().zip(points).map(|(value, point)|
             {
                 Point2{
-                    x: point.x,
+                    x: point.pos.x,
                     y: *value
                 }
             });
@@ -959,7 +965,13 @@ impl<'a> GrapherDrawer<'a>
 
     fn draw_best_fit_line(&mut self, graph: &Graph, thickness: f64, c: ColorAlpha)
     {
-        let line = graph.points().clone().map(|x| self.position(x)).best_fit_line();
+        let line = graph.points().clone().map(|x|
+        {
+            PointType{
+                pos: self.position(x.pos),
+                ..x
+            }
+        }).best_fit_line();
 
         let point_at = |x|
         {

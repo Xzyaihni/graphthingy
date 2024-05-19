@@ -24,7 +24,7 @@ impl ColorRepr for ()
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Color
 {
     pub r: u8,
